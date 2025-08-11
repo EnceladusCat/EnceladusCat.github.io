@@ -253,7 +253,10 @@
 
                 <div id="enm-diagnosis" class="tool-card" style="display: none;">
                     <h2 class="tool-title">ENM TC Diagnosis v0.1919</h2>
-                    <p style="font-size: small;"><a href="https://www.tyboard.net/forum.php?mod=viewthread&tid=2350&extra=page%3D1">相关信息</a></p>
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                        <p style="font-size: small; margin: 0;"><a href="https://www.tyboard.net/forum.php?mod=viewthread&tid=2350&extra=page%3D1">相关信息</a></p>
+                        <button id="error-info-btn" style="font-size: 0.75rem; padding: 2px 8px; background-color: var(--text-muted); color: var(--card-bg-color); border: none; border-radius: 4px; cursor: pointer;">误差情况</button>
+                    </div>
                     <div class="form-group">
                         <label for="image-upload">上传热带气旋图像 (可多选)</label>
                         <input type="file" id="image-upload" multiple accept="image/jpeg, image/png">
@@ -783,6 +786,25 @@
                 enmHelpBtn.addEventListener('click', openModal);
                 if (enmHelpCloseBtn) enmHelpCloseBtn.addEventListener('click', closeModal);
                 enmHelpOverlay.addEventListener('click', closeModal);
+
+                const errorInfoBtn = document.getElementById('error-info-btn');
+                if (errorInfoBtn) {
+                    errorInfoBtn.addEventListener('click', () => {
+                        alert(
+        `ENM模型误差情况说明：
+
+        1.  均方根误差 (RMSE): 约 8.7 KT。
+        2.  90%误差范围：13KT；70%误差范围：9KT；50%误差范围：5KT。
+        3.  主要误差来源:
+            * 小型系统: 对于环流特别小或某些结构特别小的气旋（如2024Usagi极端针眼台风），模型可能因特征不足而出现较大偏差。
+            * 非典型结构: 在遭遇强垂直风切变、干空气入侵或与西风槽相互作用时，非典型或不对称的云系结构（如2025Podul）可能导致误判。
+            * 图像质量: 低分辨率或被其他云系遮挡的图像会显著影响准确性。
+        4.  建议:
+            * 为获得更稳定的结果，建议对连续3-6小时的分析结果取平均值。
+            * 本模型结果仅为客观参考，不应替代官方预报机构的发布。`
+                        );
+                    });
+                }
             }
 
             // --- TC Real-time Logic ---
