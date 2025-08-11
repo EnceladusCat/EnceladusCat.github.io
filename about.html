@@ -90,8 +90,47 @@
         .tc-card:hover { transform: translateY(-5px); box-shadow: 0 6px 20px var(--card-shadow); }
         .tc-card img { max-width: 100%; height: auto; border-radius: 4px; background-color: #000; }
         .tc-card p { margin-top: 0.75rem; font-weight: bold; color: var(--primary-color); margin-bottom: 0; }
-        .tc-card .placeholder { width: 100%; aspect-ratio: 1/1; background-color: var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: var(--text-muted); border-radius: 4px; }
+        .tc-card .placeholder { width: 100%; aspect-ratio: 1/1; background-color: var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: var(--text-muted); border-radius: 4px; } 
 
+        /* --- Modern Action Buttons Style --- */
+        .tool-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tool-actions .action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem; /* 图标和文字的间距 */
+            padding: 0.3rem 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: var(--text-muted);
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 20px; /* 胶囊形状 */
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .tool-actions .action-link:hover {
+            background-color: var(--primary-color);
+            color: #fff; /* 悬浮时文字变白 */
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .tool-actions .action-link svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor; /* 图标颜色继承文字颜色 */
+            stroke-width: 2;
+        }
 
         @media (max-width: 768px) { .toolbox-layout { flex-direction: column; } }
     </style>
@@ -253,10 +292,19 @@
 
                 <div id="enm-diagnosis" class="tool-card" style="display: none;">
                     <h2 class="tool-title">ENM TC Diagnosis v0.1919</h2>
-                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <p style="font-size: small; margin: 0;"><a href="https://www.tyboard.net/forum.php?mod=viewthread&tid=2350&extra=page%3D1">相关信息</a></p>
-                        <button id="error-info-btn" style="font-size: 0.75rem; padding: 2px 8px; background-color: var(--text-muted); color: var(--card-bg-color); border: none; border-radius: 4px; cursor: pointer;">误差情况</button>
-                        <a href="./archive.html" style="font-size: 0.75rem; padding: 2px 8px; background-color: var(--text-muted); color: var(--card-bg-color); border-radius: 4px; text-decoration: none;">定强存档</a>
+                    <div class="tool-actions">
+                        <a href="https://www.tyboard.net/forum.php?mod=viewthread&tid=2350&extra=page%3D1" class="action-link" target="_blank" rel="noopener noreferrer">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span>相关信息</span>
+                        </a>
+                        <a id="error-info-btn" class="action-link">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            <span>误差情况</span>
+                        </a>
+                        <a href="./archive.html" class="action-link">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                            <span>定强存档</span>
+                        </a>
                     </div>
                     <div class="form-group">
                         <label for="image-upload">上传热带气旋图像 (可多选)</label>
