@@ -252,7 +252,7 @@
                 </div>
 
                 <div id="enm-diagnosis" class="tool-card" style="display: none;">
-                    <h2 class="tool-title">ENM TC Diagnosis v0.114514</h2>
+                    <h2 class="tool-title">ENM TC Diagnosis v0.1919</h2>
                     <div class="form-group">
                         <label for="image-upload">上传热带气旋图像 (可多选)</label>
                         <input type="file" id="image-upload" multiple accept="image/jpeg, image/png">
@@ -748,11 +748,11 @@
                 const helpContent = `
                                         <button id="enm-help-close" class="modal-close">&times;</button>
                                         <h3>工具简介</h3>
-                                        <p>传统的热带气旋强度分析（如德沃夏克分析法）依赖人工判读，存在一定的主观性和滞后性。<strong>ENM (Enceladus Method) TC Diagnosis</strong> 工具采用深度学习模型，旨在通过计算机视觉技术，对卫星云图进行量化、一致的特征分析，从而提供一个客观、自动化的强度评估参考。</p>
+                                        <p><strong>ENM (Enceladus Method) TC Diagnosis</strong> 工具采用深度学习模型，旨在通过计算机视觉技术，对卫星云图进行量化、一致的特征分析，从而提供一个客观、自动化的强度评估参考。</p>
                                         <p>与传统方法相比，AI模型能更稳定地测量云顶温度、眼墙结构、螺旋云带等关键特征，并能学习和识别一些特殊形态（如季风低压、针眼气旋）的细微差异，以期获得更精确的评价。</p>
                                         <h3>使用说明</h3>
                                         <ol>
-                                            <li><strong>上传图像</strong>：点击上传按钮，选择一张或多张热带气旋的红外（IR）卫星云图。</li>
+                                            <li><strong>上传图像</strong>：点击上传按钮，选择一张或多张热带气旋的<strong>红外（IR-BW）</strong>卫星云图，不要带边框/海岸线等干扰因子。</li>
                                             <li><strong>开始分析</strong>：点击“开始分析”按钮，网页端的AI模型将对每一张图片进行推理。</li>
                                             <li><strong>查看结果</strong>：模型根据云图特征计算出的平均猜测（Average Guess）风速值（单位：KT）。</li>
                                         </ol>
