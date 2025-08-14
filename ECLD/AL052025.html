@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AL052025 自评报告 - Enceladus Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8f9fa; --text-color: #212529; --primary-color: #4a90e2; --secondary-color: #f5a623;
+            --card-bg-color: #ffffff; --border-color: #dee2e6; --header-bg: #2c3e50; --header-text: #ecf0f1;
+            --text-muted: #6c757d; --card-shadow: rgba(0,0,0,0.05); --chart-grid-color: rgba(0,0,0,0.1);
+        }
+        body.dark-mode {
+            --bg-color: #121212; --text-color: #e0e0e0; --primary-color: #58a6ff; --secondary-color: #f7b731;
+            --card-bg-color: #1e1e1e; --border-color: #333; --header-bg: #1a202c; --header-text: #e2e8f0;
+            --text-muted: #a0aec0; --card-shadow: rgba(0,0,0,0.2); --chart-grid-color: rgba(255,255,255,0.1);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', 'Noto Sans SC', sans-serif; background-color: var(--bg-color); color: var(--text-color); line-height: 1.7; overflow-x: hidden; position: relative; transition: background-color 0.3s, color 0.3s; }
+        body::before, body::after { content: ''; position: fixed; z-index: -1; opacity: 0.05; transition: transform 0.5s ease-out; }
+        body::before { width: 50vw; height: 50vw; background: var(--primary-color); border-radius: 50%; top: -20vw; right: -20vw; transform: var(--before-transform, translateY(0)); }
+        body::after { width: 0; height: 0; border-style: solid; border-width: 0 0 40vw 40vw; border-color: transparent transparent var(--secondary-color) transparent; bottom: -10vw; left: -10vw; transform: var(--after-transform, rotate(-20deg)); }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .site-header { background-color: var(--header-bg); color: var(--header-text); padding: 2rem 1rem; text-align: center; margin-bottom: 3rem; border-bottom: 5px solid var(--primary-color); position: relative; overflow: hidden; transition: background-color 0.3s; }
+        .site-header::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.05) 75%, transparent 75%, transparent); background-size: 40px 40px; z-index: 0; }
+        .site-title { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; position: relative; z-index: 1; }
+        .site-nav { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; }
+        .site-nav a { color: var(--header-text); text-decoration: none; margin: 0 15px; font-weight: 300; transition: all 0.3s ease; opacity: 0.8; display: inline-block; }
+        .site-nav a:hover { color: #fff; opacity: 1; transform: translateY(-3px); }
+        .card { background-color: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 2.5rem; padding: 2.5rem; box-shadow: 0 4px 15px var(--card-shadow); transition: all 0.3s ease; }
+        .card-title { font-size: 2.2rem; margin-bottom: 1.5rem; line-height: 1.3; color: var(--article-title-color); }
+        .article-meta { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; transition: border-color 0.3s, color 0.3s; }
+        .site-footer { text-align: center; padding: 2rem 1rem; margin-top: 3rem; color: var(--text-muted); border-top: 1px solid var(--border-color); transition: all 0.3s ease; }
+        #theme-toggle { background: none; color: var(--header-text); border: 1px solid var(--header-text); padding: 6px 15px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; font-family: inherit; font-weight: 300; margin-left: 15px; display: inline-block; opacity: 0.8; transition: all 0.3s ease; }
+        #theme-toggle:hover { color: #fff; background-color: var(--primary-color); border-color: var(--primary-color); opacity: 1; transform: translateY(-3px); }
+
+        /* Custom styles for this page */
+        #reasoning-display {
+            margin-top: 2.5rem;
+            padding: 1.5rem;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            min-height: 100px;
+        }
+        #reasoning-display h3 {
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+        #reasoning-display p {
+            margin-bottom: 0.5rem;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="site-header">
+        <div class="container">
+            <h1 class="site-title">Enceladus的非财经空间</h1>
+            <nav class="site-nav">
+                <a href="./index.html">首页</a>
+                <a href="./about.html">工具</a>
+                <a href="./archive.html">归档</a>
+                <a href="./history.html">历史查询</a>
+                <a href="./realtime.html">实时</a>
+                <button id="theme-toggle">切换模式</button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="card">
+            <h1 class="card-title">热带风暴 艾琳 (AL052025) 自评报告</h1>
+            <p class="article-meta">报告生成时间: 2025年08月14日 | 点击下方图表中的数据点查看详细分析</p>
+            
+            <div>
+                <canvas id="intensityChart"></canvas>
+            </div>
+
+            <div id="reasoning-display">
+                <h3>分析详情</h3>
+                <p>请点击上方图表中的任意数据点以加载详细的分析理据。</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="site-footer">
+        <p>&copy; 2025 Enceladus. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        // --- Theme Toggle and Scroll Animation Script ---
+        (function() {
+            // ... (The full script from previous code remains here)
+            window.addEventListener('scroll', () => window.requestAnimationFrame(() => {
+                const scrollY = window.scrollY;
+                document.body.style.setProperty('--before-transform', `translateY(${scrollY * 0.1}px)`);
+                document.body.style.setProperty('--after-transform', `translateY(${scrollY * 0.2}px) rotate(-20deg)`);
+            }));
+            const themeToggle = document.getElementById('theme-toggle');
+            const body = document.body;
+            if (themeToggle) {
+                const applyTheme = (theme) => {
+                    if (theme === 'dark') {
+                        body.classList.add('dark-mode');
+                        themeToggle.textContent = '日间模式';
+                    } else {
+                        body.classList.remove('dark-mode');
+                        themeToggle.textContent = '黑夜模式';
+                    }
+                    // Redraw chart with new colors
+                    if (window.intensityChart instanceof Chart) {
+                        updateChartColors();
+                    }
+                };
+                themeToggle.addEventListener('click', () => {
+                    const newTheme = body.classList.contains('dark-mode') ? 'light' : 'dark';
+                    applyTheme(newTheme);
+                    try { localStorage.setItem('theme', newTheme); } catch (e) { console.error("无法访问 localStorage:", e); }
+                });
+                let initialTheme = 'light';
+                try {
+                    const savedTheme = localStorage.getItem('theme');
+                    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    if (savedTheme) { initialTheme = savedTheme; } else if (prefersDark) { initialTheme = 'dark'; }
+                } catch (e) { console.error("无法访问 localStorage:", e); }
+                applyTheme(initialTheme);
+            }
+        })();
+
+        // --- Chart.js Implementation ---
+        const reasoningData = [
+            { time: "0813/00Z", intensity: 40, reasoning: "<h3>[初始评估] 强度: 40 KT</h3><p>系统在此时被命名为热带风暴艾琳(Erin)。结构尚可，中心附近有持续的对流活动，但整体结构较为松散。环境因素中性，给予T2.5/CI2.5的初始评级，对应强度40节。</p>" },
+            { time: "0813/12Z", intensity: 45, reasoning: "<h3>[缓慢增强] 强度: 45 KT</h3><p>系统核心对流有所巩固，高空流出得到改善。人工德沃夏克分析(VIS)和AI工具均显示系统在缓慢增强。综合评估将强度提升至45节。</p>" },
+            { time: "0814/00Z", intensity: 45, reasoning: "<h3>[平台期] 强度: 45 KT</h3><p>系统进入一段短暂的平台期，强度维持在45节。可能是由于卷入了部分中层干空气，导致对流爆发受到抑制。但低层环流中心(LLCC)依然完整。</p>" },
+            { time: "0814/12Z", intensity: 55, reasoning: "<h3>[显著增强] 强度: 55 KT</h3><p><b>关键决策点。</b>人工VIS分析(1118Z)给出T3.0(45kt)的下限。但最新的AI IR工具给出56.9kt的客观结果，且红外云图显示核心对流爆发性增长。综合判断系统已显著增强，取55kt作为当前强度。</p>" },
+            { time: "0814/18Z", intensity: 60, reasoning: "<h3>[达到巅峰] 强度: 60 KT</h3><p>系统达到巅峰强度60节，距离一级飓风仅一步之遥。核心云区(CDO)变得非常紧密，眼墙结构开始在微波图像上显现。但系统即将进入更高风切变和较低海温的区域。</p>" },
+            { time: "0815/06Z", intensity: 50, reasoning: "<h3>[开始减弱] 强度: 50 KT</h3><p>如预期一致，系统进入不利环境后开始减弱。高空风切变增强，核心对流开始向东北侧切离，低层环流中心逐渐暴露。</p>" },
+            { time: "0815/18Z", intensity: 40, reasoning: "<h3>[持续减弱] 强度: 40 KT</h3><p>减弱趋势明显，系统深对流已经大范围剥离，强度回落至40节的热带风暴下限。系统正在快速失去其热带特性。</p>" }
+        ];
+
+        const chartLabels = reasoningData.map(d => d.time);
+        const chartIntensities = reasoningData.map(d => d.intensity);
+
+        const reasoningDisplay = document.getElementById('reasoning-display');
+        const ctx = document.getElementById('intensityChart').getContext('2d');
+        
+        let chartConfig = {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'Intensity (Knots)',
+                    data: chartIntensities,
+                    fill: false,
+                    borderColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color'),
+                    tension: 0.3,
+                    pointBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color'),
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.parsed.y} KT`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time (mmdd/hhZ)', color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted') },
+                        ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted') },
+                        grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-grid-color') }
+                    },
+                    y: {
+                        title: { display: true, text: 'Intensity (KT)', color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted') },
+                        ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted') },
+                        grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-grid-color') }
+                    }
+                },
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const clickedIndex = elements[0].index;
+                        const reasoningInfo = reasoningData[clickedIndex].reasoning;
+                        reasoningDisplay.innerHTML = reasoningInfo;
+                    }
+                },
+                onHover: (event, chartElement) => {
+                    event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+                }
+            }
+        };
+
+        window.intensityChart = new Chart(ctx, chartConfig);
+
+        function updateChartColors() {
+            const style = getComputedStyle(document.documentElement);
+            const primaryColor = style.getPropertyValue('--primary-color');
+            const mutedColor = style.getPropertyValue('--text-muted');
+            const gridColor = style.getPropertyValue('--chart-grid-color');
+
+            window.intensityChart.data.datasets[0].borderColor = primaryColor;
+            window.intensityChart.data.datasets[0].pointBackgroundColor = primaryColor;
+            window.intensityChart.options.scales.x.title.color = mutedColor;
+            window.intensityChart.options.scales.x.ticks.color = mutedColor;
+            window.intensityChart.options.scales.x.grid.color = gridColor;
+            window.intensityChart.options.scales.y.title.color = mutedColor;
+            window.intensityChart.options.scales.y.ticks.color = mutedColor;
+            window.intensityChart.options.scales.y.grid.color = gridColor;
+            window.intensityChart.update();
+        }
+
+    </script>
+
+</body>
+</html>
