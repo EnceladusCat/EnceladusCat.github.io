@@ -52,9 +52,16 @@
             margin-bottom: 1rem;
             color: var(--primary-color);
         }
-        #reasoning-display p {
+        #reasoning-display p, #reasoning-display li {
             margin-bottom: 0.5rem;
             line-height: 1.8;
+        }
+        #reasoning-display ul {
+            padding-left: 20px;
+        }
+        #reasoning-display pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
     </style>
 </head>
@@ -97,7 +104,6 @@
     <script>
         // --- Theme Toggle and Scroll Animation Script ---
         (function() {
-            // ... (The full script from previous code remains here)
             window.addEventListener('scroll', () => window.requestAnimationFrame(() => {
                 const scrollY = window.scrollY;
                 document.body.style.setProperty('--before-transform', `translateY(${scrollY * 0.1}px)`);
@@ -142,15 +148,20 @@
             { time: "0813/18Z", intensity: 40, reasoning: "<h3>强度: 40 KT</h3><p>系统进入一段短暂的平台期，根据云图表现强度维持在40节。</p>" },
             { time: "0814/00Z", intensity: 45, reasoning: "<h3>强度: 45 KT</h3><p>ASCAT UHR显示40-45KT，强度提升至45KT。系统在过去增强缓慢，但系统即将进入更高中层湿度和较高海温的区域。</p>" },
             {
-  "time": "0814/06Z",
-  "intensity": 45,
-  "reasoning": "<h3>强度: 45 KT</h3><p><b>决策依据：</b>本次定强综合了Dvorak分析与AI工具的结果。<b>1. AI分析 (0545Z VIS):</b> 德沃夏克分析结果为T3.0，对应标准强度45节。云图显示系统结构稳定，与前一报变化不大。<b>2. ENM AIIR 工具:</b> 给出的客观强度为46.3节。<b>3. 最终决策:</b> 两者结果高度一致（差异仅约1节），相互印证。AI的客观数据确认了Dvorak分析的准确性。因此，最终强度维持在45节，无调整。系统目前处于一个短暂的强度平台期。</p>"
-},
+                "time": "0814/06Z",
+                "intensity": 45,
+                "reasoning": "<h3>强度: 45 KT</h3><p><b>决策依据：</b>本次定强综合了Dvorak分析与AI工具的结果。<b>1. 主观德沃夏克分析 (0545Z VIS):</b> 德沃夏克分析结果为T3.0，对应标准强度45节。云图显示系统结构稳定，与前一报变化不大。<b>2. ENM AIIR 工具:</b> 给出的客观强度为46.3节。<b>3. 最终决策:</b> 两者结果高度一致（差异仅约1节），相互印证。AI的客观数据确认了Dvorak分析的准确性。因此，最终强度维持在45节，无调整。系统目前处于一个短暂的强度平台期。</p>"
+            },
             {
-    "time": "0814/12Z",
-    "intensity": 50,
-    "reasoning": "<h3>强度: 50 KT</h3><p><b>决策依据：</b>本次定强存在两种不同分析方法的显著冲突：基于云图形态的推断与基于海面状况的遥感反演。</p><ul><li><b>基于云图形态的分析偏强：</b><ul><li>AI主观德沃夏克分析 (T3.5) 指向 <b>55 kts</b>。</li><li>ENM AIIR 算法结果为 <b>56.9 kts</b>。</li></ul></li><li><b>基于海面状况的遥感分析偏弱：</b><ul><li>ASCAT 与 SAR 微波遥感反演数据显示近地面风场为 <b>40 kts</b>。</li></ul></li></ul><p><b>数据权衡与最终决策：</b><br>基于海面状况的遥感数据是评估近地面风场的重要依据，但也不能完全忽略卫星云图所展现的优良组织形态。因此采取审慎的折衷方案。最终强度定为 <b>50 kts</b>，此数值反映了遥感数据对强度的压制，也承认了系统优于40 kts风暴的云系结构。由于关键数据来源存在巨大分歧，本次<b>定强信心为低</b>。</p>"
-}
+                "time": "0814/12Z",
+                "intensity": 50,
+                "reasoning": "<h3>[增强] 强度: 50 KT</h3><p><b>决策依据：</b>本次定强存在两种不同分析方法的显著冲突：基于云图形态的推断与基于海面状况的遥感反演。</p><ul><li><b>基于云图形态的分析偏强：</b><ul><li>主观德沃夏克分析 (T3.5) 指向 <b>55 kts</b>。</li><li>ENM AIIR 算法结果为 <b>56.9 kts</b>。</li></ul></li><li><b>基于海面状况的遥感分析偏弱：</b><ul><li>ASCAT 与 SAR 微波遥感反演数据显示近地面风场为 <b>40 kts</b>。</li></ul></li></ul><p><b>数据权衡与最终决策：</b><br>基于海面状况的遥感数据是评估近地面风场的重要依据，但也不能完全忽略卫星云图所展现的优良组织形态。因此采取审慎的折衷方案。最终强度定为 <b>50 kts</b>，此数值反映了遥感数据对强度的压制，也承认了系统优于40 kts风暴的云系结构。由于关键数据来源存在巨大分歧，本次<b>定强信心为低</b>。</p>"
+            },
+            {
+                "time": "0814/18Z",
+                "intensity": 55,
+                "reasoning": "<h3>[维持] 强度: 55 KT (T3.5)</h3><p><b>最终判断依据：</b><br>在18Z分析节点，主观德沃夏克分析与客观AI算法 (ENM AIIR: 55.3 KT) 得出高度一致的结果，显著增强了当前强度为55节的判断。此结论的信心度提升为“中等”。以下为详细的德沃夏克分析报文及综合研判。</p><hr><h4>德沃夏克分析报文 (18Z)</h4><pre style=\"background-color:#f4f4f4; border:1px solid #ddd; padding:10px; font-family:monospace;\">TROPICAL CYCLONE ANALYSIS 02 (GEMINI)\nANALYSIS: 14/1740Z\n\nTXNT21 KNES 141800\nTCSATN\nA. 05L (ERIN)\nB. 14/1740Z\nC. 16.5N\nD. 50.8W\nE. TWO/GOES-19\nF. T3.5/3.5/S1.0/24HRS\nG. VIS/IR/EIR\nH. REMARKS...SHEAR PATTERN. THE SYSTEM CONTINUES TO SHOW A CLASSIC SHEAR PATTERN, WITH THE LLCC EMBEDDED ROUGHLY 0.5 DEGREES INTO THE EASTERN EDGE OF THE DEEP CONVECTION. THIS YIELDS A DT OF 3.5. THE 24-HOUR TREND SHOWS THE SYSTEM HAS MAINTAINED ITS STRUCTURE, LEADING TO A MET OF 3.5. THE PATTERN ON VIS IMAGERY ALSO CORRESPONDS TO A PT OF 3.5. FT IS BASED ON DT, MET AND PT.\nI. ADDL POSITIONS\nNIL\n...TROPICAL CYCLONE ANALYST (GEMINI)</pre><h4>综合分析与理据</h4><p><b>1. 云图形态判断:</b> 系统依然维持着典型的切离度 (Shear Pattern) 特征，核心对流紧凑但被切离于中心西侧。DT, MET, PT指数均统一指向T3.5 (55 kts)。<br><br><b>2. 数据权衡:</b> 在本分析周期，主观分析 (55 kts) 与客观AI算法 (55.3 kts) 的高度吻合，为强度判断提供了强力支撑。这表明尽管6小时前存在较低的海面遥感数据，但系统当前的云系结构确实反映了更强的强度。因此，采纳55 kts作为最终强度。<br><br><b>3. 定强信心:</b> 中等 (MEDIUM)。</p>"
+            }
         ];
 
         const chartLabels = reasoningData.map(d => d.time);
