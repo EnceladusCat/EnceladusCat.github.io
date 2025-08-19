@@ -14,7 +14,7 @@
             overflow: hidden;
         }
         canvas {
-            cursor: none;
+            cursor: default;
             background-color: #2c3e50;
         }
         #cyclone {
@@ -554,9 +554,9 @@
             // y = -0.0001573x^3 + 0.01632x^2 - 1.995x + 1027
             if (windKnots < 15) {
                 const knots = 15;
-                return Math.round(-0.0001573 * Math.pow(knots, 3) + 0.01632 * Math.pow(knots, 2) - 1.995 * knots + 1027);
+                return Math.round(-0.0001573 * Math.pow(knots, 3) + 0.01632 * Math.pow(knots, 2) - 1.995 * knots + 1030);
             } else if (windKnots <= 90) {
-                return Math.round(-0.0001573 * Math.pow(windKnots, 3) + 0.01632 * Math.pow(windKnots, 2) - 1.995 * windKnots + 1027);
+                return Math.round(-0.0001573 * Math.pow(windKnots, 3) + 0.01632 * Math.pow(windKnots, 2) - 1.995 * windKnots + 1030);
             } else {
                 const basePressureAt90kts = 865;
                 const slope = -2.55; // hPa per knot
