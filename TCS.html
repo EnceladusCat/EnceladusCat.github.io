@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>热带气旋模拟器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson@3"></script>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'ZCOOL+XiaoWei', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            cursor: none;
+            background-color: #2c3e50;
+        }
+        #cyclone {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: white;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: width 0.3s, height 0.3s;
+            box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.7);
+        }
+        #cyclone::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            70% { transform: scale(1.5); opacity: 0; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        #reportContent {
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex items-center justify-center h-screen">
+
+    <div class="relative w-full h-full max-w-6xl max-h-[70vh] aspect-[2/1] shadow-2xl rounded-lg overflow-hidden">
+        <canvas id="gameCanvas"></canvas>
+        <div id="cyclone"></div>
+
+        <!-- HUD -->
+        <div class="absolute top-4 left-4 bg-black/40 text-white p-4 rounded-lg text-lg shadow-lg">
+            <h2 class="text-2xl font-bold">热带气旋状态</h2>
+            <p>风速: <span id="windSpeed" class="font-bold text-yellow-300">15</span> m/s</p>
+            <p>等级: <span id="category" class="font-bold text-cyan-300">热带低压</span></p>
+            <p>最高风速: <span id="maxWindSpeed" class="font-bold text-red-400">15</span> m/s</p>
+            <p>环境潜能 (MPI): <span id="mpi" class="font-bold text-purple-300">N/A</span> m/s</p>
+            <div id="transitionContainer" class="hidden mt-2">
+                <p>性质转化:</p>
+                <div class="w-full bg-gray-500 rounded-full h-2.5">
+                    <div id="transitionBar" class="bg-blue-300 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div id="instructions" class="absolute bottom-4 right-4 bg-black/40 text-white p-4 rounded-lg text-center shadow-lg">
+            <p>移动鼠标来引导气旋</p>
+            <p>在暖水区 (红/橙色) 增强 | 在陆地或冷水区 (蓝/绿色) 减弱</p>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 bg-black/70 flex-col items-center justify-center text-white text-center z-10">
+            <h2 id="gameOverTitle" class="text-5xl font-bold mb-4">气旋已消散</h2>
+            <p class="text-2xl mb-4">本次模拟最高风速: <span id="finalMaxWind" class="font-bold text-red-400"></span> m/s</p>
+            <button id="showReportBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg mb-4">显示路径报文</button>
+            <p class="text-xl animate-pulse">按【空格键】重新开始</p>
+        </div>
+
+        <!-- Report Modal -->
+        <div id="reportModal" class="hidden absolute inset-0 bg-black/80 flex-col items-center justify-center text-white z-20 p-4">
+             <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-2xl">
+                <h2 class="text-3xl font-bold mb-4 text-center">路径报文记录</h2>
+                <div id="reportContent" class="bg-black p-4 rounded text-sm text-left"></div>
+                <button id="closeReportBtn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">关闭</button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const windSpeedEl = document.getElementById('windSpeed');
+        const categoryEl = document.getElementById('category');
+        const cycloneEl = document.getElementById('cyclone');
+        const maxWindSpeedEl = document.getElementById('maxWindSpeed');
+        const mpiEl = document.getElementById('mpi');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalMaxWindEl = document.getElementById('finalMaxWind');
+        const gameOverTitle = document.getElementById('gameOverTitle');
+        const transitionContainer = document.getElementById('transitionContainer');
+        const transitionBar = document.getElementById('transitionBar');
+        const showReportBtn = document.getElementById('showReportBtn');
+        const closeReportBtn = document.getElementById('closeReportBtn');
+        const reportModal = document.getElementById('reportModal');
+        const reportContent = document.getElementById('reportContent');
+
+        let width, height;
+        let sstData;
+        let landPath;
+        let animationFrameId;
+        let isGameOver = false;
+        let cyclonePath = [];
+        let pathCounter = 0;
+        let worldData;
+        let canMove = false;
+        let initialSstData;
+        let projection;
+        let gameTime;
+        let bestTrackHistory = [];
+
+        const cyclone = {
+            x: 0,
+            y: 0,
+            windSpeed: 15,
+            size: 20,
+            maxWindSpeed: 15,
+            extratropicalTransition: 0,
+        };
+
+        const mouse = {
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+        };
+
+        const categories = [
+            { min: 0, name: "热带低压 (TD)", color: '#FFFFFF' },
+            { min: 17.2, name: "热带风暴 (TS)", color: '#00FFFF' },
+            { min: 24.5, name: "强热带风暴 (STS)", color: '#00FF00' },
+            { min: 32.7, name: "台风 (TY)", color: '#FFFF00' },
+            { min: 41.5, name: "强台风 (STY)", color: '#FFA500' },
+            { min: 51.0, name: "超强台风 (SuperTY)", color: '#FF0000' },
+        ];
+
+        const sstColors = {
+            20: '#0000FF', 22: '#00FFFF', 24: '#00FF00', 26: '#FFFF00',
+            28: '#FFA500', 30: '#FF0000', 33: '#800000',
+        };
+
+        function getSSTColor(temp) {
+            if (temp <= 20) return sstColors[20];
+            if (temp <= 22) return interpolateColor(sstColors[20], sstColors[22], (temp - 20) / 2);
+            if (temp <= 24) return interpolateColor(sstColors[22], sstColors[24], (temp - 22) / 2);
+            if (temp <= 26) return interpolateColor(sstColors[24], sstColors[26], (temp - 24) / 2);
+            if (temp <= 28) return interpolateColor(sstColors[26], sstColors[28], (temp - 26) / 2);
+            if (temp <= 30) return interpolateColor(sstColors[28], sstColors[30], (temp - 28) / 2);
+            return interpolateColor(sstColors[30], sstColors[33], (temp - 30) / 3);
+        }
+
+        function interpolateColor(color1, color2, factor) {
+            const r1 = parseInt(color1.substring(1, 3), 16);
+            const g1 = parseInt(color1.substring(3, 5), 16);
+            const b1 = parseInt(color1.substring(5, 7), 16);
+            const r2 = parseInt(color2.substring(1, 3), 16);
+            const g2 = parseInt(color2.substring(3, 5), 16);
+            const b2 = parseInt(color2.substring(5, 7), 16);
+            const r = Math.round(r1 + factor * (r2 - r1));
+            const g = Math.round(g1 + factor * (g2 - g1));
+            const b = Math.round(b1 + factor * (b2 - b1));
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+        }
+
+        async function setup(isFullReset = false) {
+            const container = canvas.parentElement;
+            width = container.clientWidth;
+            height = container.clientHeight;
+
+            if (width === 0 || height === 0) return;
+
+            canvas.width = width;
+            canvas.height = height;
+            
+            // **修正**: 随机化生成位置
+            cyclone.x = width * (0.4 + Math.random() * 0.5);
+            cyclone.y = height * (0.9 - Math.random() * 0.4);
+            cyclone.windSpeed = 12;
+            cyclone.maxWindSpeed = 12;
+            cyclone.extratropicalTransition = 0;
+            
+            cyclonePath = [];
+            pathCounter = 0;
+            gameTime = new Date(2025, 7, 14, 0);
+            bestTrackHistory = [];
+
+            isGameOver = false;
+            gameOverScreen.style.display = 'none';
+            cycloneEl.style.display = 'block';
+
+            if (isFullReset || !initialSstData) {
+                await defineLand();
+                initializeSST();
+                initialSstData = JSON.parse(JSON.stringify(sstData));
+            } else {
+                sstData = JSON.parse(JSON.stringify(initialSstData));
+            }
+
+            drawFullBackground();
+        }
+
+        function initializeSST() {
+            sstData = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                const peakY = height * 0.8;
+                const maxTemp = 33;
+                const minTemp = 13;
+                const sigma = height * 0.3;
+                const baseTemp = minTemp + (maxTemp - minTemp) * Math.exp(-Math.pow(y - peakY, 2) / (2 * sigma * sigma));
+                for (let x = 0; x < width; x++) {
+                    if (landPath && ctx.isPointInPath(landPath, x, y)) {
+                        row.push(null);
+                        continue;
+                    }
+                    const noise1 = Math.sin(x / 55) * Math.cos(y / 80) * 1.0;
+                    const noise2 = Math.sin(x / 18) * Math.cos(y / 22) * 0.3;
+                    const noise = noise1 + noise2;
+                    row.push(baseTemp + noise);
+                }
+                sstData.push(row);
+            }
+        }
+        
+        async function defineLand() {
+            if (!worldData) return;
+            const geojson = topojson.feature(worldData, worldData.objects.countries);
+            
+            const fitObject = {
+                type: "Polygon",
+                coordinates: [[[110, 60], [180, 60], [180, 0], [110, 0], [110, 60]]]
+            };
+            projection = d3.geoMercator().fitSize([width, height], fitObject);
+
+            const pathGenerator = d3.geoPath(projection, ctx);
+            
+            landPath = new Path2D();
+            pathGenerator.context(landPath);
+            pathGenerator(geojson);
+        }
+
+        function drawLand() {
+            if (!landPath) return;
+            ctx.fillStyle = '#6B4F35';
+            ctx.fill(landPath);
+            ctx.strokeStyle = '#F5DEB3';
+            ctx.lineWidth = 1;
+            ctx.stroke(landPath);
+        }
+
+        function drawFullBackground() {
+            if (width === 0 || height === 0) return;
+            const imageData = ctx.createImageData(width, height);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const temp = sstData[y][x];
+                    const index = (y * width + x) * 4;
+
+                    if (temp === null) {
+                        imageData.data[index + 3] = 0;
+                        continue;
+                    }
+
+                    const color = getSSTColor(temp);
+                    const r = parseInt(color.substring(1, 3), 16);
+                    const g = parseInt(color.substring(3, 5), 16);
+                    const b = parseInt(color.substring(5, 7), 16);
+                    
+                    imageData.data[index] = r;
+                    imageData.data[index + 1] = g;
+                    imageData.data[index + 2] = b;
+                    imageData.data[index + 3] = 255;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            drawLand();
+        }
+        
+        function updateSSTAndDraw(cx, cy, radius) {
+            for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y++) {
+                for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x++) {
+                    if (sstData[y][x] === null) continue;
+                    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                    if (dist < radius) {
+                        const coolingFactor = 0.03;
+                        sstData[y][x] -= coolingFactor * (radius - dist) / radius;
+                    }
+                }
+            }
+        }
+
+        function getCategoryColor(windSpeed) {
+            for (let i = categories.length - 1; i >= 0; i--) {
+                if (windSpeed >= categories[i].min) {
+                    return categories[i].color;
+                }
+            }
+            return categories[0].color;
+        }
+
+        function drawPath() {
+            if (cyclonePath.length < 2) return;
+            for (let i = 0; i < cyclonePath.length - 1; i++) {
+                const p1 = cyclonePath[i];
+                const p2 = cyclonePath[i + 1];
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = getCategoryColor(p1.windSpeed);
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function endGame(reason = 'dissipated') {
+            isGameOver = true;
+            cancelAnimationFrame(animationFrameId);
+            
+            if (reason === 'transitioned') {
+                gameOverTitle.textContent = '已转化为温带气旋';
+            } else {
+                gameOverTitle.textContent = '气旋已消散';
+            }
+
+            finalMaxWindEl.textContent = cyclone.maxWindSpeed.toFixed(1);
+            gameOverScreen.style.display = 'flex';
+            cycloneEl.style.display = 'none';
+        }
+
+        function calculateMPI(sst) {
+            if (sst < 26) return 12;
+            const maxPossibleWind = 93;
+            const mpi = 12 + (sst - 26) * 12;
+            return Math.min(mpi, maxPossibleWind);
+        }
+
+        function gameLoop() {
+            if (isGameOver) return;
+
+            if (canMove) {
+                const speedFactor = 0.01;
+                const dx = mouse.x - cyclone.x;
+                const dy = mouse.y - cyclone.y;
+                cyclone.x += dx * speedFactor;
+                cyclone.y += dy * speedFactor;
+            }
+
+            const cx = Math.floor(cyclone.x);
+            const cy = Math.floor(cyclone.y);
+
+            let currentSST = null;
+            let mpi = 0;
+
+            if (landPath && ctx.isPointInPath(landPath, cx, cy)) {
+                cyclone.windSpeed *= 0.98;
+                cyclone.extratropicalTransition -= 0.2;
+                mpiEl.textContent = '陆地';
+            } else {
+                if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy] && sstData[cy][cx] !== undefined) {
+                    currentSST = sstData[cy][cx];
+                    if (currentSST !== null) {
+                        mpi = calculateMPI(currentSST);
+                        mpiEl.textContent = mpi.toFixed(1);
+                        
+                        const strengtheningFactor = 0.005;
+                        const windSpeedChange = (mpi - cyclone.windSpeed) * strengtheningFactor * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
+                        cyclone.windSpeed += windSpeedChange;
+
+                        updateSSTAndDraw(cx, cy, 30);
+
+                        const transitionThreshold = 25;
+                        if (currentSST < transitionThreshold) {
+                            const transitionRate = (transitionThreshold - currentSST) * 0.9;
+                            cyclone.extratropicalTransition += transitionRate;
+                        } else {
+                            cyclone.extratropicalTransition -= 0.2;
+                        }
+                    } else {
+                         mpiEl.textContent = 'N/A';
+                    }
+                }
+            }
+            
+            cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
+
+            pathCounter++;
+            if (pathCounter % 5 === 0) {
+                 cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
+            }
+            if (pathCounter % 15 === 0) {
+                updateBestTrackReport();
+                gameTime.setHours(gameTime.getHours() + 6);
+            }
+
+            cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
+            cyclone.maxWindSpeed = Math.max(cyclone.maxWindSpeed, cyclone.windSpeed);
+            
+            updateUI();
+
+            cycloneEl.style.left = `${cyclone.x}px`;
+            cycloneEl.style.top = `${cyclone.y}px`;
+            cyclone.size = 10 + cyclone.windSpeed * 0.2;
+            cycloneEl.style.width = `${cyclone.size}px`;
+            cycloneEl.style.height = `${cyclone.size}px`;
+
+            if (cyclone.windSpeed < 10) {
+                endGame('dissipated');
+            } else if (cyclone.extratropicalTransition >= 100) {
+                endGame('transitioned');
+            }
+
+            drawFullBackground();
+            drawPath();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        
+        function updateUI() {
+            windSpeedEl.textContent = cyclone.windSpeed.toFixed(1);
+            maxWindSpeedEl.textContent = cyclone.maxWindSpeed.toFixed(1);
+            
+            let currentCategory = categories[0].name;
+            for (let i = categories.length - 1; i >= 0; i--) {
+                if (cyclone.windSpeed >= categories[i].min) {
+                    currentCategory = categories[i].name;
+                    break;
+                }
+            }
+            categoryEl.textContent = currentCategory;
+
+            if (cyclone.extratropicalTransition > 0) {
+                transitionContainer.style.display = 'block';
+                transitionBar.style.width = `${cyclone.extratropicalTransition}%`;
+            } else {
+                transitionContainer.style.display = 'none';
+            }
+        }
+
+        function updateBestTrackReport() {
+            if (!projection) return;
+            const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
+            const latStr = `${Math.abs(Math.round(lat * 10))}${lat >= 0 ? 'N' : 'S'}`;
+            const lonStr = `${Math.abs(Math.round(lon * 10))}${lon >= 0 ? 'E' : 'W'}`;
+            const windKnots = Math.round(cyclone.windSpeed / 0.51444);
+            
+            const year = gameTime.getFullYear();
+            const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
+            const day = gameTime.getDate().toString().padStart(2, '0');
+            const hour = gameTime.getHours().toString().padStart(2, '0');
+            const timeStr = `${year}${month}${day}${hour}`;
+            
+            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${windKnots}`;
+            bestTrackHistory.push(reportLine);
+        }
+
+        async function startGame(isFullReset = false) {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            await setup(isFullReset);
+            
+            canMove = false;
+            setTimeout(() => {
+                canMove = true;
+            }, 600);
+
+            gameLoop();
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+
+        window.addEventListener('resize', () => startGame(true));
+
+        window.addEventListener('keydown', (e) => {
+            if (isGameOver && e.code === 'Space') {
+                startGame(false);
+            }
+        });
+
+        showReportBtn.addEventListener('click', () => {
+            reportContent.textContent = bestTrackHistory.join('\n');
+            reportModal.style.display = 'flex';
+        });
+
+        closeReportBtn.addEventListener('click', () => {
+            reportModal.style.display = 'none';
+        });
+
+        window.addEventListener('load', async () => {
+            try {
+                worldData = await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
+                await startGame(true);
+            } catch (error) {
+                console.error("Failed to load world map data:", error);
+            }
+        });
+
+    </script>
+</body>
+</html>
