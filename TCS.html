@@ -595,7 +595,7 @@
                 initializeColorScale();
                 
                 // Fetch the world map data
-                worldData = await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
+                worldData = await d3.json('countries-110m.json');
                 await startGame(true);
                 // Hide loading screen on success
                 loadingScreen.style.display = 'none';
