@@ -88,6 +88,8 @@
             <p>等级: <span id="category" class="font-bold text-cyan-300">热带低压</span></p>
             <p>最高风速: <span id="maxWindSpeed" class="font-bold text-red-400">15</span> m/s</p>
             <p>环境潜能 (MPI): <span id="mpi" class="font-bold text-purple-300">N/A</span> m/s</p>
+            <p>移速: <span id="moveSpeed" class="font-bold text-green-300">0</span> kph</p>
+            <p>时间: <span id="gameTime" class="font-bold text-gray-300"></span></p>
             <div id="transitionContainer" class="hidden mt-2">
                 <p>性质转化:</p>
                 <div class="w-full bg-gray-500 rounded-full h-2.5">
@@ -138,6 +140,9 @@
         const loadingScreen = document.getElementById('loading-screen');
         const loadingError = document.getElementById('loading-error');
         const climateSlider = document.getElementById('climate-slider');
+        // ADDED DOM elements for speed and time
+        const moveSpeedEl = document.getElementById('moveSpeed');
+        const gameTimeEl = document.getElementById('gameTime');
 
         // Game state variables
         let width, height;
@@ -154,6 +159,7 @@
         let bestTrackHistory = [];
         let sstColorScale;
         let landMask;
+        let kmPerPixel = 0; // ADDED variable for map scale
 
         // Cyclone object
         const cyclone = {
@@ -163,6 +169,10 @@
             size: 20,
             maxWindSpeed: 12,
             extratropicalTransition: 0,
+            // ADDED properties to calculate movement speed
+            moveSpeedKph: 0,
+            lastReportX: 0,
+            lastReportY: 0,
         };
 
         const mouse = {
@@ -211,6 +221,10 @@
             cyclone.windSpeed = 12;
             cyclone.maxWindSpeed = 12;
             cyclone.extratropicalTransition = 0;
+            // ADDED initialization for speed properties
+            cyclone.lastReportX = cyclone.x;
+            cyclone.lastReportY = cyclone.y;
+            cyclone.moveSpeedKph = 0;
             
             cyclonePath = [];
             pathCounter = 0;
@@ -223,6 +237,12 @@
 
             if (isFullReset || !landPath) {
                 await defineLand();
+                // ADDED map scale calculation
+                const mapWidthDegrees = 20; // from fitObject in defineLand()
+                const kmPerDegreeAtEquator = 111.32;
+                const mapWidthKm = mapWidthDegrees * kmPerDegreeAtEquator;
+                kmPerPixel = mapWidthKm / width;
+
                 generateLandMask();
             }
             
@@ -236,7 +256,7 @@
             if (!landPath || !width || !height) return;
             console.log("Generating land mask...");
             
-            const resolution = 2; // Check every 5x5 pixel block instead of every pixel.
+            const resolution = 3; // Check every 2x2 pixel block instead of every pixel.
             const maskWidth = Math.ceil(width / resolution);
             const maskHeight = Math.ceil(height / resolution);
             const lowResMask = [];
@@ -354,7 +374,7 @@
             for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y++) {
                 for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x++) {
                     if (sstData[y] && sstData[y][x] !== null) {
-                       const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                        const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
                         if (dist < radius) {
                             const coolingFactor = 0.03;
                             sstData[y][x] -= coolingFactor * (radius - dist) / radius;
@@ -469,6 +489,16 @@
             if (pathCounter % 15 === 0) {
                 updateBestTrackReport();
                 gameTime.setHours(gameTime.getHours() + 6);
+                
+                // ADDED speed calculation logic
+                const pixelDist = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2);
+                const distKm = pixelDist * kmPerPixel;
+                const timeHours = 6; // Reports are 6-hourly
+                cyclone.moveSpeedKph = distKm / timeHours;
+                
+                // Update last position for next calculation
+                cyclone.lastReportX = cyclone.x;
+                cyclone.lastReportY = cyclone.y;
             }
 
             cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
@@ -513,6 +543,14 @@
             } else {
                 transitionContainer.style.display = 'none';
             }
+            
+            // ADDED UI updates for speed and time
+            moveSpeedEl.textContent = isNaN(cyclone.moveSpeedKph) ? '0' : (cyclone.moveSpeedKph*5).toFixed(0);
+            const year = gameTime.getFullYear();
+            const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
+            const day = gameTime.getDate().toString().padStart(2, '0');
+            const hour = gameTime.getHours().toString().padStart(2, '0');
+            gameTimeEl.textContent = `${year}-${month}-${day} ${hour}Z`;
         }
 
         function updateBestTrackReport() {
