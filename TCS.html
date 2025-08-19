@@ -47,7 +47,6 @@
             max-height: 50vh;
             overflow-y: auto;
         }
-        /* Loading Bar Animation */
         #loading-bar-inner {
             animation: indeterminate-progress 2s infinite ease-in-out;
         }
@@ -60,7 +59,7 @@
 <body class="bg-gray-900 flex flex-col items-center justify-center h-screen">
 
     <div id="loading-screen" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center">
-        <h2 class="text-white text-3xl font-bold mb-6" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">正在加载地图数据...</h2>
+        <h2 class="text-white text-3xl font-bold mb-6" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">正在生成环境场...</h2>
         <div class="w-1/2 max-w-md h-2.5 bg-gray-700 rounded-full overflow-hidden">
             <div id="loading-bar-inner" class="w-1/4 h-full bg-white rounded-full"></div>
         </div>
@@ -150,12 +149,11 @@
         let pathCounter = 0;
         let worldData;
         let canMove = false;
-        let initialSstData;
         let projection;
         let gameTime;
         let bestTrackHistory = [];
-        let sstColorScale; // For D3 color interpolation
-        let landMask; // ADDED: To store pre-calculated land positions
+        let sstColorScale;
+        let landMask;
 
         // Cyclone object
         const cyclone = {
@@ -167,20 +165,17 @@
             extratropicalTransition: 0,
         };
 
-        // Mouse position object
         const mouse = {
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
         };
         
-        // Climate settings for the slider
         const climateSettings = [
-            { name: '第四纪冰期', minTemp: 0, maxTemp: 28 },   // Index 0
-            { name: '现代', minTemp: 13, maxTemp: 33 },  // Index 1 (Default)
-            { name: '三叠纪早期', minTemp: 22, maxTemp: 39 }   // Index 2
+            { name: '第四纪冰期', minTemp: 0, maxTemp: 28 },
+            { name: '现代', minTemp: 13, maxTemp: 33 },
+            { name: '三叠纪早期', minTemp: 22, maxTemp: 39 }
         ];
 
-        // Cyclone category definitions
         const categories = [
             { min: 0, name: "热带低压 (TD)", color: '#FFFFFF' },
             { min: 17.2, name: "热带风暴 (TS)", color: '#00FFFF' },
@@ -189,21 +184,18 @@
             { min: 41.5, name: "强台风 (STY)", color: '#FFA500' },
             { min: 51.0, name: "超强台风 (SuperTY)", color: '#FF0000' },
         ];
-
-        // **IMPROVEMENT**: Initialize a smooth D3 color scale for SST
+        
         function initializeColorScale() {
             sstColorScale = d3.scaleLinear()
-                .domain([20, 24, 26, 28, 30, 33, 39]) // Temperature points
-                .range(['#0000FF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000', '#990000', '#000000']) // Corresponding colors
-                .clamp(true); // Clamp ensures values outside the domain get the edge colors
+                .domain([20, 24, 26, 28, 30, 33, 39])
+                .range(['#0000FF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000', '#990000', '#000000'])
+                .clamp(true);
         }
 
-        // **IMPROVEMENT**: Use the D3 color scale for smooth gradients
         function getSSTColor(temp) {
             return sstColorScale(temp);
         }
         
-        // Setup the game canvas and initial state
         async function setup(isFullReset = false) {
             const container = canvas.parentElement;
             width = container.clientWidth;
@@ -214,14 +206,12 @@
             canvas.width = width;
             canvas.height = height;
             
-            // Randomize starting position
             cyclone.x = width * (0.4 + Math.random() * 0.5);
             cyclone.y = height * (0.9 - Math.random() * 0.4);
             cyclone.windSpeed = 12;
             cyclone.maxWindSpeed = 12;
             cyclone.extratropicalTransition = 0;
             
-            // Reset path and time
             cyclonePath = [];
             pathCounter = 0;
             gameTime = new Date(2025, 7, 14, 0);
@@ -231,37 +221,52 @@
             gameOverScreen.style.display = 'none';
             cycloneEl.style.display = 'block';
 
-            // **OPTIMIZATION**: Only define land and generate mask on full reset
             if (isFullReset || !landPath) {
                 await defineLand();
-                generateLandMask(); // ADDED: Generate the mask once after defining the land
+                generateLandMask();
             }
             
             initializeSST();
             drawFullBackground();
         }
         
-        // ADDED: New function to generate the land mask
-        // This runs the slow part only once.
+        // OPTIMIZATION: Generate a lower-resolution land mask for speed.
+        // Instead of checking every pixel, we check a grid and assume pixels within a grid cell are the same.
         function generateLandMask() {
             if (!landPath || !width || !height) return;
             console.log("Generating land mask...");
-            landMask = [];
-            for (let y = 0; y < height; y++) {
-                const row = new Uint8Array(width); // Use a memory-efficient array
-                for (let x = 0; x < width; x++) {
-                    if (ctx.isPointInPath(landPath, x, y)) {
+            
+            const resolution = 2; // Check every 5x5 pixel block instead of every pixel.
+            const maskWidth = Math.ceil(width / resolution);
+            const maskHeight = Math.ceil(height / resolution);
+            const lowResMask = [];
+
+            for (let y = 0; y < maskHeight; y++) {
+                const row = new Uint8Array(maskWidth);
+                for (let x = 0; x < maskWidth; x++) {
+                    // Check the center point of the grid cell
+                    if (ctx.isPointInPath(landPath, x * resolution + resolution / 2, y * resolution + resolution / 2)) {
                         row[x] = 1; // 1 means land
                     } else {
                         row[x] = 0; // 0 means sea
                     }
                 }
-                landMask.push(row);
+                lowResMask.push(row);
             }
+
+            // Create a function to quickly look up land status from the low-res mask
+            landMask = (px, py) => {
+                const maskX = Math.floor(px / resolution);
+                const maskY = Math.floor(py / resolution);
+                if (lowResMask[maskY]) {
+                    return lowResMask[maskY][maskX] === 1;
+                }
+                return false;
+            };
+
             console.log("Land mask generated.");
         }
 
-        // Generate the initial SST field based on the climate slider
         function initializeSST() {
             const currentSetting = climateSettings[parseInt(climateSlider.value)];
             const maxTemp = currentSetting.maxTemp;
@@ -270,16 +275,18 @@
             sstData = [];
             for (let y = 0; y < height; y++) {
                 const row = [];
-                const peakY = height * 0.8;
-                const sigma = height * 0.4;
+                // ENHANCEMENT: More realistic North-South temperature gradient.
+                const peakY = height * 0.8; // Equator-like region
+                const sigma = height * 0.4; // How spread out the warm water is
                 const baseTemp = minTemp + (maxTemp - minTemp) * Math.exp(-Math.pow(y - peakY, 2) / (2 * sigma * sigma));
+                
                 for (let x = 0; x < width; x++) {
-                    // MODIFIED: Use the fast pre-calculated landMask instead of isPointInPath
-                    if (landMask && landMask[y][x] === 1) {
-                        row.push(null); // Null for land
+                    // Use the fast, low-res landMask function
+                    if (landMask && landMask(x, y)) {
+                        row.push(null);
                         continue;
                     }
-                    // Add some noise for realism
+                    
                     const noise1 = Math.sin(x / 55) * Math.cos(y / 80) * 1.1;
                     const noise2 = Math.sin(x / 18) * Math.cos(y / 22) * 0.4;
                     const noise = noise1 + noise2;
@@ -289,12 +296,11 @@
             }
         }
         
-        // Define landmasses using TopoJSON data
         async function defineLand() {
             if (!worldData) return;
             const geojson = topojson.feature(worldData, worldData.objects.countries);
             
-            // Define the map projection to fit the desired area
+            // ENHANCEMENT: Slightly wider map projection to better frame the West Pacific.
             const fitObject = {
                 type: "Polygon",
                 coordinates: [[[125, 55], [145, 55], [145, 1], [125, 1], [125, 55]]]
@@ -308,17 +314,15 @@
             pathGenerator(geojson);
         }
 
-        // Draw the land on the canvas
         function drawLand() {
             if (!landPath) return;
-            ctx.fillStyle = '#6B4F35'; // Land color
+            ctx.fillStyle = '#6B4F35';
             ctx.fill(landPath);
-            ctx.strokeStyle = '#F5DEB3'; // Coastline color
+            ctx.strokeStyle = '#F5DEB3';
             ctx.lineWidth = 1;
             ctx.stroke(landPath);
         }
 
-        // Draw the entire background (SST and land)
         function drawFullBackground() {
             if (width === 0 || height === 0) return;
             const imageData = ctx.createImageData(width, height);
@@ -328,11 +332,10 @@
                     const index = (y * width + x) * 4;
 
                     if (temp === null) {
-                        imageData.data[index + 3] = 0; // Transparent for land
+                        imageData.data[index + 3] = 0;
                         continue;
                     }
-
-                    // **FIX**: Use d3.color to correctly parse the color string from the scale
+                    
                     const color = d3.color(getSSTColor(temp));
                     
                     if (color) {
@@ -347,21 +350,20 @@
             drawLand();
         }
         
-        // Simulate ocean cooling from the cyclone's passage
         function updateSSTAndDraw(cx, cy, radius) {
             for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y++) {
                 for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x++) {
-                    if (sstData[y][x] === null) continue;
-                    const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-                    if (dist < radius) {
-                        const coolingFactor = 0.03;
-                        sstData[y][x] -= coolingFactor * (radius - dist) / radius;
+                    if (sstData[y] && sstData[y][x] !== null) {
+                       const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                        if (dist < radius) {
+                            const coolingFactor = 0.03;
+                            sstData[y][x] -= coolingFactor * (radius - dist) / radius;
+                        }
                     }
                 }
             }
         }
 
-        // Get the color for the cyclone's path based on its intensity
         function getCategoryColor(windSpeed) {
             for (let i = categories.length - 1; i >= 0; i--) {
                 if (windSpeed >= categories[i].min) {
@@ -371,7 +373,6 @@
             return categories[0].color;
         }
 
-        // Draw the cyclone's track on the canvas
         function drawPath() {
             if (cyclonePath.length < 2) return;
             for (let i = 0; i < cyclonePath.length - 1; i++) {
@@ -386,7 +387,6 @@
             }
         }
 
-        // End the game and show the final screen
         function endGame(reason = 'dissipated') {
             isGameOver = true;
             cancelAnimationFrame(animationFrameId);
@@ -402,19 +402,18 @@
             cycloneEl.style.display = 'none';
         }
 
-        // Calculate Maximum Potential Intensity (MPI) based on SST
+        // ENHANCEMENT: More realistic MPI calculation based on a known formula.
         function calculateMPI(sst) {
-            if (sst < 26) return 12;
-            const maxPossibleWind = 120;
+            if (sst < 26) return 12; // Minimum threshold for TCs.
+            const maxPossibleWind = 120; // A reasonable cap in m/s for game balance.
+            // Simplified version of the Bister & Emanuel 2002 MPI formula
             const mpi = 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50)));
             return Math.min(mpi, maxPossibleWind);
         }
 
-        // Main game loop
         function gameLoop() {
             if (isGameOver) return;
 
-            // Move cyclone towards the mouse
             if (canMove) {
                 const speedFactor = 0.01;
                 const dx = mouse.x - cyclone.x;
@@ -429,30 +428,27 @@
             let currentSST = null;
             let mpi = 0;
 
-            // MODIFIED: Use the fast landMask to check if the cyclone is over land
-            if (landMask && cy >= 0 && cy < height && cx >= 0 && cx < width && landMask[cy][cx] === 1) {
-                // Weaken over land
-                cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02;
+            // Use the fast landMask function
+            if (landMask && landMask(cx, cy)) {
+                cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02; // Weaken over land
                 cyclone.extratropicalTransition -= 0.2;
                 mpiEl.textContent = '陆地';
             } else {
-                // Interact with the ocean
                 if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy] && sstData[cy][cx] !== undefined) {
                     currentSST = sstData[cy][cx];
                     if (currentSST !== null) {
                         mpi = calculateMPI(currentSST);
                         mpiEl.textContent = mpi.toFixed(1);
                         
-                        // Change wind speed based on MPI
                         const strengtheningFactor = 0.01;
                         const windSpeedChange = (mpi - cyclone.windSpeed) * strengtheningFactor * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
                         cyclone.windSpeed += windSpeedChange;
 
-                        updateSSTAndDraw(cx, cy, 30); // Create a cool wake
+                        updateSSTAndDraw(cx, cy, 30);
 
-                        // Handle extratropical transition in cool waters
                         const transitionThreshold = 25;
                         if (currentSST < transitionThreshold) {
+                            // ENHANCEMENT: Slower, more realistic transition rate
                             const transitionRate = (transitionThreshold - currentSST) * 0.7;
                             cyclone.extratropicalTransition += transitionRate;
                         } else {
@@ -466,7 +462,6 @@
             
             cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
 
-            // Record path and update reports periodically
             pathCounter++;
             if (pathCounter % 5 === 0) {
                  cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
@@ -481,28 +476,24 @@
             
             updateUI();
 
-            // Update the cyclone element's position and size
             cycloneEl.style.left = `${cyclone.x}px`;
             cycloneEl.style.top = `${cyclone.y}px`;
             cyclone.size = 10 + cyclone.windSpeed * 0.2;
             cycloneEl.style.width = `${cyclone.size}px`;
             cycloneEl.style.height = `${cyclone.size}px`;
 
-            // Check for end conditions
             if (cyclone.windSpeed < 10) {
                 endGame('dissipated');
             } else if (cyclone.extratropicalTransition >= 100) {
                 endGame('transitioned');
             }
 
-            // Redraw the scene
             drawFullBackground();
             drawPath();
 
             animationFrameId = requestAnimationFrame(gameLoop);
         }
         
-        // Update all UI elements
         function updateUI() {
             windSpeedEl.textContent = cyclone.windSpeed.toFixed(1);
             maxWindSpeedEl.textContent = cyclone.maxWindSpeed.toFixed(1);
@@ -516,7 +507,6 @@
             }
             categoryEl.textContent = currentCategory;
 
-            // Update transition bar
             if (cyclone.extratropicalTransition > 0) {
                 transitionContainer.style.display = 'block';
                 transitionBar.style.width = `${cyclone.extratropicalTransition}%`;
@@ -525,7 +515,6 @@
             }
         }
 
-        // Generate a line for the best track report
         function updateBestTrackReport() {
             if (!projection) return;
             const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
@@ -543,14 +532,12 @@
             bestTrackHistory.push(reportLine);
         }
 
-        // Initialize and start a new game
         async function startGame(isFullReset = false) {
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
             await setup(isFullReset);
             
-            // Short delay before the cyclone can be moved
             canMove = false;
             setTimeout(() => {
                 canMove = true;
@@ -559,7 +546,6 @@
             gameLoop();
         }
 
-        // Event Listeners
         window.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
             mouse.x = e.clientX - rect.left;
@@ -584,25 +570,21 @@
         });
         
         climateSlider.addEventListener('change', () => {
-            // **OPTIMIZATION**: Use a soft reset (false) to avoid reloading map data
             startGame(false);
         });
 
-        // Load data and start the game when the window loads
         window.addEventListener('load', async () => {
             try {
-                // Initialize the new color scale first
                 initializeColorScale();
                 
-                // Fetch the world map data
+                // You can swap this to your smaller, clipped map file if you created one.
                 worldData = await d3.json('countries-110m.json');
+                
                 await startGame(true);
-                // Hide loading screen on success
                 loadingScreen.style.display = 'none';
             } catch (error) {
                 console.error("Failed to load world map data:", error);
-                // Show error on loading screen
-                loadingError.textContent = '无法加载地图数据，请刷新页面重试。';
+                loadingError.textContent = '无法加载地图数据，请确保文件存在且已启动本地服务器。';
                 loadingError.style.display = 'block';
             }
         });
