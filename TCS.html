@@ -549,7 +549,7 @@
         }
 
         function calculatePressureFromMS(windSpeedInMs) {
-            const windKnots = windSpeedInMs / 0.51444;
+            const windKnots = windSpeedInMs;
             // Cubic equation from best-fit model where x is wind speed in knots.
             // y = -0.0001573x^3 + 0.01632x^2 - 1.995x + 1027
             if (windKnots < 15) {
