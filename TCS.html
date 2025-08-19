@@ -85,6 +85,7 @@
         <div class="absolute top-4 left-4 bg-black/40 text-white p-4 rounded-lg text-lg shadow-lg">
             <h2 class="text-2xl font-bold">热带气旋状态</h2>
             <p>风速: <span id="windSpeed" class="font-bold text-yellow-300">15</span> m/s</p>
+            <p>气压: <span id="pressure" class="font-bold text-blue-300"></span> hPa</p>
             <p>等级: <span id="category" class="font-bold text-cyan-300">热带低压</span></p>
             <p>最高风速: <span id="maxWindSpeed" class="font-bold text-red-400">15</span> m/s</p>
             <p>环境潜能 (MPI): <span id="mpi" class="font-bold text-purple-300">N/A</span> m/s</p>
@@ -140,9 +141,9 @@
         const loadingScreen = document.getElementById('loading-screen');
         const loadingError = document.getElementById('loading-error');
         const climateSlider = document.getElementById('climate-slider');
-        // ADDED DOM elements for speed and time
         const moveSpeedEl = document.getElementById('moveSpeed');
         const gameTimeEl = document.getElementById('gameTime');
+        const pressureEl = document.getElementById('pressure'); // Get pressure element
 
         // Game state variables
         let width, height;
@@ -159,17 +160,17 @@
         let bestTrackHistory = [];
         let sstColorScale;
         let landMask;
-        let kmPerPixel = 0; // ADDED variable for map scale
+        let kmPerPixel = 0;
 
         // Cyclone object
         const cyclone = {
             x: 0,
             y: 0,
             windSpeed: 12,
+            pressure: 1005, // Add pressure property
             size: 20,
             maxWindSpeed: 12,
             extratropicalTransition: 0,
-            // ADDED properties to calculate movement speed
             moveSpeedKph: 0,
             lastReportX: 0,
             lastReportY: 0,
@@ -221,7 +222,6 @@
             cyclone.windSpeed = 12;
             cyclone.maxWindSpeed = 12;
             cyclone.extratropicalTransition = 0;
-            // ADDED initialization for speed properties
             cyclone.lastReportX = cyclone.x;
             cyclone.lastReportY = cyclone.y;
             cyclone.moveSpeedKph = 0;
@@ -237,8 +237,7 @@
 
             if (isFullReset || !landPath) {
                 await defineLand();
-                // ADDED map scale calculation
-                const mapWidthDegrees = 20; // from fitObject in defineLand()
+                const mapWidthDegrees = 20;
                 const kmPerDegreeAtEquator = 111.32;
                 const mapWidthKm = mapWidthDegrees * kmPerDegreeAtEquator;
                 kmPerPixel = mapWidthKm / width;
@@ -250,13 +249,11 @@
             drawFullBackground();
         }
         
-        // OPTIMIZATION: Generate a lower-resolution land mask for speed.
-        // Instead of checking every pixel, we check a grid and assume pixels within a grid cell are the same.
         function generateLandMask() {
             if (!landPath || !width || !height) return;
             console.log("Generating land mask...");
             
-            const resolution = 3; // Check every 2x2 pixel block instead of every pixel.
+            const resolution = 3;
             const maskWidth = Math.ceil(width / resolution);
             const maskHeight = Math.ceil(height / resolution);
             const lowResMask = [];
@@ -264,17 +261,15 @@
             for (let y = 0; y < maskHeight; y++) {
                 const row = new Uint8Array(maskWidth);
                 for (let x = 0; x < maskWidth; x++) {
-                    // Check the center point of the grid cell
                     if (ctx.isPointInPath(landPath, x * resolution + resolution / 2, y * resolution + resolution / 2)) {
-                        row[x] = 1; // 1 means land
+                        row[x] = 1;
                     } else {
-                        row[x] = 0; // 0 means sea
+                        row[x] = 0;
                     }
                 }
                 lowResMask.push(row);
             }
 
-            // Create a function to quickly look up land status from the low-res mask
             landMask = (px, py) => {
                 const maskX = Math.floor(px / resolution);
                 const maskY = Math.floor(py / resolution);
@@ -295,21 +290,25 @@
             sstData = [];
             for (let y = 0; y < height; y++) {
                 const row = [];
-                // ENHANCEMENT: More realistic North-South temperature gradient.
-                const peakY = height * 0.8; // Equator-like region
-                const sigma = height * 0.4; // How spread out the warm water is
+                const peakY = height * 0.8;
+                const sigma = height * 0.4;
                 const baseTemp = minTemp + (maxTemp - minTemp) * Math.exp(-Math.pow(y - peakY, 2) / (2 * sigma * sigma));
                 
                 for (let x = 0; x < width; x++) {
-                    // Use the fast, low-res landMask function
                     if (landMask && landMask(x, y)) {
                         row.push(null);
                         continue;
                     }
                     
-                    const noise1 = Math.sin(x / 55) * Math.cos(y / 80) * 1.1;
-                    const noise2 = Math.sin(x / 18) * Math.cos(y / 22) * 0.4;
-                    const noise = noise1 + noise2;
+                    const noise1 = Math.sin(x / 45) * Math.cos(y / 80) * 1.1;
+                    const noise2 = Math.sin(x / 38) * Math.cos(y / 52) * 0.4;
+                    const noise3 = Math.sin(x / 23) * Math.cos(y / 27) * 0.4;
+                    const coolPatchCenterX = width * 0.23;
+                    const coolPatchSigma = width * 0.1;
+                    const coolPatchStrength = -2.0;
+                    const dx = x - coolPatchCenterX;
+                    const noise4 = coolPatchStrength * Math.exp(-(dx * dx) / (2 * coolPatchSigma * coolPatchSigma));
+                    const noise = noise1 + noise2 + noise3 + noise4;
                     row.push(baseTemp + noise);
                 }
                 sstData.push(row);
@@ -320,7 +319,6 @@
             if (!worldData) return;
             const geojson = topojson.feature(worldData, worldData.objects.countries);
             
-            // ENHANCEMENT: Slightly wider map projection to better frame the West Pacific.
             const fitObject = {
                 type: "Polygon",
                 coordinates: [[[125, 55], [145, 55], [145, 1], [125, 1], [125, 55]]]
@@ -422,11 +420,9 @@
             cycloneEl.style.display = 'none';
         }
 
-        // ENHANCEMENT: More realistic MPI calculation based on a known formula.
         function calculateMPI(sst) {
-            if (sst < 26) return 12; // Minimum threshold for TCs.
-            const maxPossibleWind = 120; // A reasonable cap in m/s for game balance.
-            // Simplified version of the Bister & Emanuel 2002 MPI formula
+            if (sst < 26) return 12;
+            const maxPossibleWind = 120;
             const mpi = 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50)));
             return Math.min(mpi, maxPossibleWind);
         }
@@ -448,9 +444,8 @@
             let currentSST = null;
             let mpi = 0;
 
-            // Use the fast landMask function
             if (landMask && landMask(cx, cy)) {
-                cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02; // Weaken over land
+                cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02;
                 cyclone.extratropicalTransition -= 0.2;
                 mpiEl.textContent = '陆地';
             } else {
@@ -468,7 +463,6 @@
 
                         const transitionThreshold = 25;
                         if (currentSST < transitionThreshold) {
-                            // ENHANCEMENT: Slower, more realistic transition rate
                             const transitionRate = (transitionThreshold - currentSST) * 0.7;
                             cyclone.extratropicalTransition += transitionRate;
                         } else {
@@ -490,19 +484,20 @@
                 updateBestTrackReport();
                 gameTime.setHours(gameTime.getHours() + 6);
                 
-                // ADDED speed calculation logic
                 const pixelDist = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2);
                 const distKm = pixelDist * kmPerPixel;
-                const timeHours = 6; // Reports are 6-hourly
+                const timeHours = 6;
                 cyclone.moveSpeedKph = distKm / timeHours;
                 
-                // Update last position for next calculation
                 cyclone.lastReportX = cyclone.x;
                 cyclone.lastReportY = cyclone.y;
             }
 
             cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
             cyclone.maxWindSpeed = Math.max(cyclone.maxWindSpeed, cyclone.windSpeed);
+            
+            // Calculate pressure right after wind speed is finalized for the frame
+            cyclone.pressure = calculatePressureFromMS(cyclone.windSpeed);
             
             updateUI();
 
@@ -527,6 +522,7 @@
         function updateUI() {
             windSpeedEl.textContent = cyclone.windSpeed.toFixed(1);
             maxWindSpeedEl.textContent = cyclone.maxWindSpeed.toFixed(1);
+            pressureEl.textContent = cyclone.pressure; // Update pressure display
             
             let currentCategory = categories[0].name;
             for (let i = categories.length - 1; i >= 0; i--) {
@@ -544,7 +540,6 @@
                 transitionContainer.style.display = 'none';
             }
             
-            // ADDED UI updates for speed and time
             moveSpeedEl.textContent = isNaN(cyclone.moveSpeedKph) ? '0' : (cyclone.moveSpeedKph*5).toFixed(0);
             const year = gameTime.getFullYear();
             const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
@@ -553,12 +548,29 @@
             gameTimeEl.textContent = `${year}-${month}-${day} ${hour}Z`;
         }
 
+        function calculatePressureFromMS(windSpeedInMs) {
+            const windKnots = windSpeedInMs / 0.51444;
+            // Cubic equation from best-fit model where x is wind speed in knots.
+            // y = -0.0001573x^3 + 0.01632x^2 - 1.995x + 1027
+            if (windKnots < 15) {
+                const knots = 15;
+                return Math.round(-0.0001573 * Math.pow(knots, 3) + 0.01632 * Math.pow(knots, 2) - 1.995 * knots + 1027);
+            } else if (windKnots <= 90) {
+                return Math.round(-0.0001573 * Math.pow(windKnots, 3) + 0.01632 * Math.pow(windKnots, 2) - 1.995 * windKnots + 1027);
+            } else {
+                const basePressureAt90kts = 865;
+                const slope = -2.55; // hPa per knot
+                return Math.round(basePressureAt90kts + (windKnots - 90) * slope);
+            }
+        }
+
         function updateBestTrackReport() {
             if (!projection) return;
             const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
             const latStr = `${Math.abs(Math.round(lat * 10))}${lat >= 0 ? 'N' : 'S'}`;
             const lonStr = `${Math.abs(Math.round(lon * 10))}${lon >= 0 ? 'E' : 'W'}`;
             const windKnots = Math.round(cyclone.windSpeed / 0.51444);
+            const pressure = cyclone.pressure; // Use the pressure calculated in the game loop
             
             const year = gameTime.getFullYear();
             const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
@@ -566,7 +578,8 @@
             const hour = gameTime.getHours().toString().padStart(2, '0');
             const timeStr = `${year}${month}${day}${hour}`;
             
-            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${windKnots}`;
+            // The report line now includes the pressure
+            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${windKnots}, ${pressure}`;
             bestTrackHistory.push(reportLine);
         }
 
@@ -615,7 +628,6 @@
             try {
                 initializeColorScale();
                 
-                // You can swap this to your smaller, clipped map file if you created one.
                 worldData = await d3.json('countries-110m.json');
                 
                 await startGame(true);
