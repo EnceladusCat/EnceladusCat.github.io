@@ -334,9 +334,9 @@
 
         function drawLand() {
             if (!landPath) return;
-            ctx.fillStyle = '#6B4F35';
+            ctx.fillStyle = '#645545';
             ctx.fill(landPath);
-            ctx.strokeStyle = '#F5DEB3';
+            ctx.strokeStyle = '#916e66';
             ctx.lineWidth = 1;
             ctx.stroke(landPath);
         }
@@ -421,7 +421,7 @@
         }
 
         function calculateMPI(sst) {
-            if (sst < 26) return 12;
+            if (sst < 25.5) return 0;
             const maxPossibleWind = 120;
             const mpi = 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50)));
             return Math.min(mpi, maxPossibleWind);
