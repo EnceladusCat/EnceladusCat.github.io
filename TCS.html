@@ -374,7 +374,7 @@
                     if (sstData[y] && sstData[y][x] !== null) {
                         const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
                         if (dist < radius) {
-                            const coolingFactor = 0.03;
+                            const coolingFactor = 0.049;
                             sstData[y][x] -= coolingFactor * (radius - dist) / radius;
                         }
                     }
