@@ -876,7 +876,7 @@
         window.addEventListener('load', async () => {
             try {
                 initializeColorScale();
-                worldData = await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
+                worldData = await d3.json('countries-110m.json');
                 await startGame(true);
                 loadingScreen.style.display = 'none';
             } catch (error) {
