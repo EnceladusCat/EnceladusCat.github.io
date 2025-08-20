@@ -90,7 +90,7 @@
             <p>最高风速: <span id="maxWindSpeed" class="font-bold text-red-400">15</span> m/s</p>
             <p>环境潜能 (MPI): <span id="mpi" class="font-bold text-purple-300">N/A</span> m/s</p>
             <p>移速: <span id="moveSpeed" class="font-bold text-green-300">0</span> kph</p>
-            <p>时间: <span id="gameTime" class="font-bold text-gray-300"></span></p>
+            <p>ACE: <span id="ace" class="font-bold text-orange-400">0.0</span></p> <p>时间: <span id="gameTime" class="font-bold text-gray-300"></span></p>
             <div id="transitionContainer" class="hidden mt-2">
                 <p>性质转化:</p>
                 <div class="w-full bg-gray-500 rounded-full h-2.5">
@@ -142,6 +142,7 @@
         const loadingError = document.getElementById('loading-error');
         const climateSlider = document.getElementById('climate-slider');
         const moveSpeedEl = document.getElementById('moveSpeed');
+        const aceEl = document.getElementById('ace'); // Add this line
         const gameTimeEl = document.getElementById('gameTime');
         const pressureEl = document.getElementById('pressure'); // Get pressure element
 
@@ -171,6 +172,7 @@
             size: 20,
             maxWindSpeed: 12,
             extratropicalTransition: 0,
+            ace: 0,
             moveSpeedKph: 0,
             lastReportX: 0,
             lastReportY: 0,
@@ -198,8 +200,8 @@
         
         function initializeColorScale() {
             sstColorScale = d3.scaleLinear()
-                .domain([20, 24, 26, 28, 30, 33, 39])
-                .range(['#0000FF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000', '#990000', '#000000'])
+                .domain([10, 20, 24, 26, 28, 30, 33, 39])
+                .range(['#EEEEEE','#0000FF', '#00FF00', '#FFFF00', '#FFA500', '#FF0000', '#990000', '#000000'])
                 .clamp(true);
         }
 
@@ -225,6 +227,7 @@
             cyclone.lastReportX = cyclone.x;
             cyclone.lastReportY = cyclone.y;
             cyclone.moveSpeedKph = 0;
+            cyclone.ace = 0;
             
             cyclonePath = [];
             pathCounter = 0;
@@ -523,7 +526,8 @@
             windSpeedEl.textContent = cyclone.windSpeed.toFixed(1);
             maxWindSpeedEl.textContent = cyclone.maxWindSpeed.toFixed(1);
             pressureEl.textContent = cyclone.pressure; // Update pressure display
-            
+            aceEl.textContent = cyclone.ace.toFixed(4); // Update ACE display
+
             let currentCategory = categories[0].name;
             for (let i = categories.length - 1; i >= 0; i--) {
                 if (cyclone.windSpeed >= categories[i].min) {
@@ -569,7 +573,16 @@
             const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
             const latStr = `${Math.abs(Math.round(lat * 10))}${lat >= 0 ? 'N' : 'S'}`;
             const lonStr = `${Math.abs(Math.round(lon * 10))}${lon >= 0 ? 'E' : 'W'}`;
+            
+            // Calculate wind in knots and round to nearest 5 for report and ACE
             const windKnots = Math.round(cyclone.windSpeed / 0.51444);
+            const roundedWindKnots = Math.round(windKnots / 5) * 5;
+
+            // Add to ACE if wind speed is at or above Tropical Storm strength (34 kts)
+            if (roundedWindKnots >= 34) {
+                cyclone.ace += (roundedWindKnots ** 2) / 10000;
+            }
+
             const pressure = cyclone.pressure; // Use the pressure calculated in the game loop
             
             const year = gameTime.getFullYear();
@@ -578,8 +591,8 @@
             const hour = gameTime.getHours().toString().padStart(2, '0');
             const timeStr = `${year}${month}${day}${hour}`;
             
-            // The report line now includes the pressure
-            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${windKnots}, ${pressure}`;
+            // The report line now uses the rounded knots value
+            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${roundedWindKnots}, ${pressure}`;
             bestTrackHistory.push(reportLine);
         }
 
