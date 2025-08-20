@@ -435,14 +435,14 @@
                     freqY: 45 + Math.random() * 20,
                     offsetX: Math.random() * 1000,
                     offsetY: Math.random() * 1000,
-                    amplitude: (8 + Math.random() * 5) * intensity
+                    amplitude: (8 + Math.random() * 8) * intensity
                 },
                 { // Layer 3: Very fine-grained noise
                     freqX: 15 + Math.random() * 10,
                     freqY: 20 + Math.random() * 10,
                     offsetX: Math.random() * 1000,
                     offsetY: Math.random() * 1000,
-                    amplitude: (4 + Math.random() * 3) * intensity
+                    amplitude: (4 + Math.random() * 15) * intensity
                 }
             ];
 
@@ -876,7 +876,7 @@
         window.addEventListener('load', async () => {
             try {
                 initializeColorScale();
-                worldData = await d3.json('countries-110m.json');
+                worldData = await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
                 await startGame(true);
                 loadingScreen.style.display = 'none';
             } catch (error) {
