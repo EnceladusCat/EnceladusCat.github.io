@@ -41,8 +41,10 @@
             70% { transform: scale(1.5); opacity: 0; }
             100% { transform: scale(1.5); opacity: 0; }
         }
-        #reportContent {
+        #reportContent, #recordList {
             font-family: 'Courier New', Courier, monospace;
+        }
+        #reportContent {
             white-space: pre;
             max-height: 50vh;
             overflow-y: auto;
@@ -67,7 +69,7 @@
         <p id="loading-error" class="text-red-500 mt-4 hidden"></p>
     </div>
 
-    <h1 class="text-white text-3xl font-bold mb-4" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">Typhoon Simulator V0.2 BY @Enceladus from TyBoard</h1>
+    <h1 class="text-white text-3xl font-bold mb-4" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">Typhoon Simulator by @Enceladus from TyBoard</h1>
 
     <div id="controls-container" class="text-white text-center mb-4 w-full max-w-4xl flex space-x-4">
         <div id="climate-control" class="flex-1">
@@ -150,11 +152,27 @@
                 <button id="closeReportBtn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">关闭</button>
             </div>
         </div>
+        
+        <div id="recordModal" class="hidden absolute inset-0 bg-black/80 flex-col items-center justify-center text-white z-50 p-4">
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-2xl">
+                <h2 class="text-3xl font-bold mb-4 text-center">模拟历史记录</h2>
+                <div id="recordList" class="bg-black p-4 rounded text-base text-left max-h-[60vh] overflow-y-auto">
+                    </div>
+                <button id="closeRecordBtn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">关闭</button>
+            </div>
+        </div>
     </div>
+
     <div id="music-control" class="fixed top-4 left-4 bg-gray-800/60 backdrop-blur-sm text-white p-3 rounded-lg flex items-center space-x-3 shadow-lg z-30 select-none cursor-pointer">
         <span id="music-icon" class="text-3xl" style="font-family: 'Times New Roman', serif;">♪</span>
         <span class="text-lg font-bold">— Into the Vortex(remix)</span>
     </div>
+
+    <div id="record-button" class="fixed top-20 left-4 bg-gray-800/60 backdrop-blur-sm text-white p-3 rounded-lg flex items-center space-x-3 shadow-lg z-30 select-none cursor-pointer">
+        <span class="text-3xl">🗂️</span>
+        <span class="text-lg font-bold">生成记录</span>
+    </div>
+
     <script>
         // Get DOM elements
         const canvas = document.getElementById('gameCanvas');
@@ -192,6 +210,12 @@
         const toggleDryAirBtn = document.getElementById('toggleDryAirBtn');
         const humidityEl = document.getElementById('humidity');
 
+        // ADDED: Elements for the new record-keeping feature
+        const recordButton = document.getElementById('record-button');
+        const recordModal = document.getElementById('recordModal');
+        const recordList = document.getElementById('recordList');
+        const closeRecordBtn = document.getElementById('closeRecordBtn');
+
         // Game state variables
         let width, height;
         let sstData;
@@ -209,6 +233,11 @@
         let landMask;
         let kmPerPixel = 0;
         let contourPathGenerator;
+
+        // ADDED: Variables for simulation history
+        let simulationCount = 0;
+        let simulationHistory = [];
+        
         // Environmental state variables
         let dryAirData, vwsData;
         let gridResolution = 3;
@@ -224,22 +253,21 @@
         };
         
         const vwsContourColors = {
-             10: 'rgba(0, 255, 0, 0.7)',   // Low shear (Green)
-            20: 'rgba(255, 255, 0, 0.7)', // Moderate shear (Yellow)
-            30: 'rgba(255, 0, 0, 0.7)',   // High shear (Red)
-            40: 'rgba(255, 0, 255, 0.7)'  // Very High shear (Magenta)
+             10: 'rgba(0, 255, 0, 0.7)',
+            20: 'rgba(255, 255, 0, 0.7)',
+            30: 'rgba(255, 0, 0, 0.7)',
+            40: 'rgba(255, 0, 255, 0.7)'
         };
 
         const cyclone = {
             x: 0, y: 0,
             windSpeed: 12, pressure: 1005, size: 20,
-            maxWindSpeed: 12, extratropicalTransition: 0, ace: 0,
+            maxWindSpeed: 12, minPressure: 1005, // ADDED minPressure
+            extratropicalTransition: 0, ace: 0,
             moveSpeedKph: 0, lastReportX: 0, lastReportY: 0,
         };
 
         const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-
-        // MODIFIED: Removed the discrete climateSettings array
 
         const categories = [
             { min: 0, name: "热带低压 (TD)", color: '#FFFFFF' },
@@ -272,12 +300,12 @@
 
             contourPathGenerator = d3.geoPath();
             
-            // MODIFIED: Set VWS movement to be west-to-east
             vwsMovement = { dx: 1, dy: 0 };
 
             cyclone.x = width * (0.2 + Math.random() * 0.7);
             cyclone.y = height * (0.9 - Math.random() * 0.4);
             cyclone.windSpeed = 12; cyclone.maxWindSpeed = 12;
+            cyclone.minPressure = 1005; // Reset min pressure
             cyclone.extratropicalTransition = 0; cyclone.lastReportX = cyclone.x;
             cyclone.lastReportY = cyclone.y; cyclone.moveSpeedKph = 0;
             cyclone.ace = 0;
@@ -328,23 +356,18 @@
             };
         }
 
-        // MODIFIED: This function now interpolates temperatures for a smooth transition
         function initializeSST() {
-            const climateValue = parseInt(climateSlider.value); // Value from 0 to 100
+            const climateValue = parseInt(climateSlider.value);
             let minTemp, maxTemp;
-
-            // Define the key temperature points for interpolation
             const iceAge = { min: 0, max: 28 };
             const modern = { min: 13, max: 33 };
             const triassic = { min: 22, max: 39 };
 
             if (climateValue <= 50) {
-                // Interpolate between Cooler (0) and Modern (50)
                 const t = climateValue / 50;
                 minTemp = iceAge.min * (1 - t) + modern.min * t;
                 maxTemp = iceAge.max * (1 - t) + modern.max * t;
             } else {
-                // Interpolate between Modern (50) and Warmer (100)
                 const t = (climateValue - 50) / 50;
                 minTemp = modern.min * (1 - t) + triassic.min * t;
                 maxTemp = modern.max * (1 - t) + triassic.max * t;
@@ -376,112 +399,71 @@
         }
 
         function initializeDryAir() {
-                    dryAirData = [];
-                    const intensity = parseInt(dryAirSlider.value) / 100;
-                    const baseRH = 1.00 - (intensity * 0.4);
-                    const dryFactor = 0.7 * intensity;
-                    const gridWidth = Math.ceil(width / gridResolution);
-                    const gridHeight = Math.ceil(height / gridResolution);
-
-                    // Randomize the number and properties of dry air "blobs"
-                    const numBlobs = 2 + Math.floor(Math.random() * 2); // Generate 2 or 3 blobs
-                    const blobs = [];
-                    for (let i = 0; i < numBlobs; i++) {
-                        blobs.push({
-                            x: width * (Math.random() * 0.9 + 0.05),     // Random x position
-                            y: height * (Math.random() * 0.8 + 0.1),    // Random y position
-                            sigmaX: width * (Math.random() * 0.15 + 0.2), // Random width
-                            sigmaY: height * (Math.random() * 0.2 + 0.25),// Random height
-                            strength: (Math.random() * 0.5 + 0.7)       // Random strength multiplier
-                        });
-                    }
-
-                    // Randomize background noise parameters
-                    const noiseParams = {
-                        freqX: 60 + Math.random() * 40,
-                        freqY: 80 + Math.random() * 40,
-                        offsetX: Math.random() * 1000,
-                        offsetY: Math.random() * 1000,
-                        amplitude: 0.03 + Math.random() * 0.04
-                    };
-
-                    for (let y = 0; y < gridHeight; y++) {
-                        const row = [];
-                        for (let x = 0; x < gridWidth; x++) {
-                            const scaledX = x * gridResolution;
-                            const scaledY = y * gridResolution;
-
-                            // Calculate the combined drying effect from all blobs
-                            let blobEffect = 0;
-                            blobs.forEach(blob => {
-                                const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
-                                blobEffect += Math.exp(exponent) * blob.strength;
-                            });
-
-                            // Calculate the randomized background noise
-                            const noise = Math.sin((scaledX + noiseParams.offsetX) / noiseParams.freqX) * Math.cos((scaledY + noiseParams.offsetY) / noiseParams.freqY) * noiseParams.amplitude;
-
-                            // Combine all factors to determine the final relative humidity (rh)
-                            let rh = baseRH - (blobEffect * dryFactor) + noise;
-
-                            row.push(Math.max(0.15, Math.min(0.98, rh)));
-                        }
-                        dryAirData.push(row);
-                    }
-                }
-        
-        // MODIFIED: Function to generate a more complex, localized, and random VWS field
-        function initializeVws() {
-            vwsData = [];
-            const intensity = parseInt(vwsSlider.value) / 100; // 0 to 1
-            const maxShear = 0 + intensity * 90; // Max shear for the jet
+            dryAirData = [];
+            const intensity = parseInt(dryAirSlider.value) / 100;
+            const baseRH = 1.00 - (intensity * 0.4);
+            const dryFactor = 0.7 * intensity;
             const gridWidth = Math.ceil(width / gridResolution);
             const gridHeight = Math.ceil(height / gridResolution);
-
-            // Multi-layered noise parameters, randomized for each simulation
-            const noiseParams = [
-                { // Layer 1: Medium-sized patches
-                    freqX: 80 + Math.random() * 40,
-                    freqY: 100 + Math.random() * 40,
-                    offsetX: Math.random() * 1000,
-                    offsetY: Math.random() * 1000,
-                    amplitude: (10 + Math.random() * 5) * intensity
-                },
-                { // Layer 2: Smaller, more localized patches
-                    freqX: 35 + Math.random() * 20,
-                    freqY: 45 + Math.random() * 20,
-                    offsetX: Math.random() * 1000,
-                    offsetY: Math.random() * 1000,
-                    amplitude: (8 + Math.random() * 8) * intensity
-                },
-                { // Layer 3: Very fine-grained noise
-                    freqX: 15 + Math.random() * 10,
-                    freqY: 20 + Math.random() * 10,
-                    offsetX: Math.random() * 1000,
-                    offsetY: Math.random() * 1000,
-                    amplitude: (4 + Math.random() * 15) * intensity
+            const numBlobs = 2 + Math.floor(Math.random() * 2);
+            const blobs = [];
+            for (let i = 0; i < numBlobs; i++) {
+                blobs.push({
+                    x: width * (Math.random() * 0.9 + 0.05),
+                    y: height * (Math.random() * 0.8 + 0.1),
+                    sigmaX: width * (Math.random() * 0.15 + 0.2),
+                    sigmaY: height * (Math.random() * 0.2 + 0.25),
+                    strength: (Math.random() * 0.5 + 0.7)
+                });
+            }
+            const noiseParams = {
+                freqX: 60 + Math.random() * 40,
+                freqY: 80 + Math.random() * 40,
+                offsetX: Math.random() * 1000,
+                offsetY: Math.random() * 1000,
+                amplitude: 0.03 + Math.random() * 0.04
+            };
+            for (let y = 0; y < gridHeight; y++) {
+                const row = [];
+                for (let x = 0; x < gridWidth; x++) {
+                    const scaledX = x * gridResolution;
+                    const scaledY = y * gridResolution;
+                    let blobEffect = 0;
+                    blobs.forEach(blob => {
+                        const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
+                        blobEffect += Math.exp(exponent) * blob.strength;
+                    });
+                    const noise = Math.sin((scaledX + noiseParams.offsetX) / noiseParams.freqX) * Math.cos((scaledY + noiseParams.offsetY) / noiseParams.freqY) * noiseParams.amplitude;
+                    let rh = baseRH - (blobEffect * dryFactor) + noise;
+                    row.push(Math.max(0.15, Math.min(0.98, rh)));
                 }
+                dryAirData.push(row);
+            }
+        }
+        
+        function initializeVws() {
+            vwsData = [];
+            const intensity = parseInt(vwsSlider.value) / 100;
+            const maxShear = 0 + intensity * 90;
+            const gridWidth = Math.ceil(width / gridResolution);
+            const gridHeight = Math.ceil(height / gridResolution);
+            const noiseParams = [
+                { freqX: 80 + Math.random() * 40, freqY: 100 + Math.random() * 40, offsetX: Math.random() * 1000, offsetY: Math.random() * 1000, amplitude: (10 + Math.random() * 5) * intensity },
+                { freqX: 35 + Math.random() * 20, freqY: 45 + Math.random() * 20, offsetX: Math.random() * 1000, offsetY: Math.random() * 1000, amplitude: (8 + Math.random() * 8) * intensity },
+                { freqX: 15 + Math.random() * 10, freqY: 20 + Math.random() * 10, offsetX: Math.random() * 1000, offsetY: Math.random() * 1000, amplitude: (4 + Math.random() * 15) * intensity }
             ];
-
             for (let y = 0; y < gridHeight; y++) {
                 const row = [];
                 for (let x = 0; x < gridWidth; x++) {
                     const scaledY = y * gridResolution;
                     const scaledX = x * gridResolution;
-
-                    // Base shear: Northern jet stream
                     const jetStrength = Math.exp(-((scaledY - height * 0.1)**2) / (2 * (height*0.1)**2));
                     let shear = maxShear * jetStrength;
-
-                    // Calculate and add localized noise
                     let localShearNoise = 0;
                     noiseParams.forEach(p => {
                         localShearNoise += Math.sin((scaledX + p.offsetX) / p.freqX) * Math.cos((scaledY + p.offsetY) / p.freqY) * p.amplitude;
                     });
-
-                    // Add only the positive part of the noise to create high-shear zones
                     shear += Math.max(0, localShearNoise);
-
                     row.push(Math.max(0, shear));
                 }
                 vwsData.push(row);
@@ -499,16 +481,7 @@
         function updateVwsLayer() {
             if (!vwsData || vwsData.length === 0) return;
             const gridHeight = vwsData.length;
-
-            if (vwsMovement.dx === 1) { // Shift content to the right
-                for (let y = 0; y < gridHeight; y++) { vwsData[y].unshift(vwsData[y].pop()); }
-            } else if (vwsMovement.dx === -1) { // Shift content to the left
-                for (let y = 0; y < gridHeight; y++) { vwsData[y].push(vwsData[y].shift()); }
-            } else if (vwsMovement.dy === 1) { // Shift content down
-                vwsData.unshift(vwsData.pop());
-            } else if (vwsMovement.dy === -1) { // Shift content up
-                vwsData.push(vwsData.shift());
-            }
+            if (vwsMovement.dx === 1) { for (let y = 0; y < gridHeight; y++) { vwsData[y].unshift(vwsData[y].pop()); } }
         }
 
         function moistenEnvironment(cx, cy) {
@@ -522,13 +495,10 @@
             const gridWidth = dryAirData[0].length;
             for (let y = Math.max(0, gridCY - gridRadius); y < Math.min(gridHeight, gridCY + gridRadius); y++) {
                 for (let x = Math.max(0, gridCX - gridRadius); x < Math.min(gridWidth, gridCX + gridRadius); x++) {
-                    const scaledX = x * gridResolution + gridResolution / 2;
-                    const scaledY = y * gridResolution + gridResolution / 2;
-                    const dist = Math.sqrt((scaledX - cx) ** 2 + (scaledY - cy) ** 2);
+                    const dist = Math.sqrt(((x * gridResolution + gridResolution / 2) - cx) ** 2 + ((y * gridResolution + gridResolution / 2) - cy) ** 2);
                     if (dist < radius) {
                         if (dryAirData[y] && dryAirData[y][x] !== undefined) {
-                            dryAirData[y][x] += moisteningFactor * (1 - dist / radius);
-                            dryAirData[y][x] = Math.min(0.98, dryAirData[y][x]);
+                            dryAirData[y][x] = Math.min(0.98, dryAirData[y][x] + moisteningFactor * (1 - dist / radius));
                         }
                     }
                 }
@@ -538,23 +508,13 @@
         function drawContourLayer(ctx, isVisible, gridData, contourColors, pathGenerator) {
             ctx.clearRect(0, 0, width, height);
             if (!isVisible || !gridData || !pathGenerator || gridData.length === 0) return;
-
-            const gridHeight = gridData.length;
-            const gridWidth = gridData[0].length;
-            
             const thresholds = Object.keys(contourColors).map(Number);
-            const contours = d3.contours()
-                .size([gridWidth, gridHeight])
-                .thresholds(thresholds);
-            
-            const values = gridData.flat();
-            const contourData = contours(values);
-
+            const contours = d3.contours().size([gridData[0].length, gridData.length]).thresholds(thresholds);
+            const contourData = contours(gridData.flat());
             ctx.save();
             ctx.scale(gridResolution, gridResolution);
             ctx.lineWidth = 1.5 / gridResolution;
             pathGenerator.context(ctx);
-
             contourData.forEach(contour => {
                 ctx.strokeStyle = contourColors[contour.value] || 'white';
                 ctx.beginPath();
@@ -567,12 +527,10 @@
         async function defineLand() {
             if (!worldData) return;
             const geojson = topojson.feature(worldData, worldData.objects.countries);
-            const fitObject = { type: "Polygon", coordinates: [[[125, 55], [145, 55], [145, 1], [125, 1], [125, 55]]] };
-            projection = d3.geoEquirectangular().fitSize([width, height], fitObject);
+            projection = d3.geoEquirectangular().fitSize([width, height], { type: "Polygon", coordinates: [[[125, 55], [145, 55], [145, 1], [125, 1], [125, 55]]] });
             const pathGenerator = d3.geoPath(projection);
             landPath = new Path2D();
-            pathGenerator.context(landPath);
-            pathGenerator(geojson);
+            pathGenerator.context(landPath)(geojson);
         }
 
         function drawLand() {
@@ -584,15 +542,16 @@
         function drawFullBackground() {
             if (width === 0 || height === 0) return;
             const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const temp = sstData[y][x];
                     const index = (y * width + x) * 4;
-                    if (temp === null) { imageData.data[index + 3] = 0; continue; }
+                    if (temp === null) { data[index + 3] = 0; continue; }
                     const color = d3.color(getSSTColor(temp));
                     if (color) {
-                        imageData.data[index] = color.r; imageData.data[index + 1] = color.g;
-                        imageData.data[index + 2] = color.b; imageData.data[index + 3] = 255;
+                        data[index] = color.r; data[index + 1] = color.g;
+                        data[index + 2] = color.b; data[index + 3] = 255;
                     }
                 }
             }
@@ -606,8 +565,7 @@
                     if (sstData[y] && sstData[y][x] !== null) {
                         const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
                         if (dist < radius) {
-                            const coolingFactor = 0.049;
-                            sstData[y][x] -= coolingFactor * (radius - dist) / radius;
+                            sstData[y][x] -= 0.049 * (radius - dist) / radius;
                         }
                     }
                 }
@@ -633,16 +591,19 @@
         function endGame(reason = 'dissipated') {
             isGameOver = true;
             cancelAnimationFrame(animationFrameId);
+            
+            // ADDED: Save simulation results to history
+            simulationHistory.push({
+                round: simulationCount,
+                maxWind: cyclone.maxWindSpeed,
+                minPressure: cyclone.minPressure,
+                bst: [...bestTrackHistory] // Copy the array
+            });
+
             switch(reason) {
-                case 'transitioned':
-                    gameOverTitle.textContent = '已转化为温带气旋';
-                    break;
-                case 'terminated':
-                    gameOverTitle.textContent = '模拟已手动终止';
-                    break;
-                default:
-                    gameOverTitle.textContent = '气旋已消散';
-                    break;
+                case 'transitioned': gameOverTitle.textContent = '已转化为温带气旋'; break;
+                case 'terminated': gameOverTitle.textContent = '模拟已手动终止'; break;
+                default: gameOverTitle.textContent = '气旋已消散'; break;
             }
             finalMaxWindEl.textContent = cyclone.maxWindSpeed.toFixed(1);
             gameOverScreen.style.display = 'flex';
@@ -651,9 +612,7 @@
 
         function calculateMPI(sst) {
             if (sst < 25.5) return 0;
-            const maxPossibleWind = 120;
-            const mpi = 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50)));
-            return Math.min(mpi, maxPossibleWind);
+            return Math.min(120, 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50))));
         }
 
         function gameLoop() {
@@ -661,85 +620,62 @@
 
             if (canMove) {
                 const speedFactor = 0.01;
-                const dx = mouse.x - cyclone.x; const dy = mouse.y - cyclone.y;
-                cyclone.x += dx * speedFactor; cyclone.y += dy * speedFactor;
+                cyclone.x += (mouse.x - cyclone.x) * speedFactor;
+                cyclone.y += (mouse.y - cyclone.y) * speedFactor;
             }
 
             const cx = Math.floor(cyclone.x); const cy = Math.floor(cyclone.y);
-            let currentSST = null; let mpi = 0; let currentRH = 0.5; let currentVws = 0;
+            let currentSST = null, mpi = 0, currentRH = 0.5, currentVws = 0;
 
             if (landMask && landMask(cx, cy)) {
                 cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02;
-                cyclone.extratropicalTransition -= 0.2;
+                cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
                 mpiEl.textContent = '陆地'; humidityEl.textContent = 'N/A'; vwsEl.textContent = 'N/A';
-            } else {
-                if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy] && sstData[cy][cx] !== undefined) {
-                    currentSST = sstData[cy][cx];
+            } else if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy]?.[cx] !== undefined) {
+                currentSST = sstData[cy][cx];
+                const gridX = Math.floor(cx / gridResolution);
+                const gridY = Math.floor(cy / gridResolution);
+                
+                if (dryAirData?.[gridY]?.[gridX] !== undefined) {
+                    currentRH = dryAirData[gridY][gridX];
+                    humidityEl.textContent = `${(currentRH * 100).toFixed(0)}%`;
+                }
+                if (vwsData?.[gridY]?.[gridX] !== undefined) {
+                    currentVws = vwsData[gridY][gridX];
+                    vwsEl.textContent = `${currentVws.toFixed(1)}`;
+                }
+
+                if (currentSST !== null) {
+                    mpi = calculateMPI(currentSST);
+                    mpiEl.textContent = mpi.toFixed(1);
                     
-                    const gridX = Math.floor(cx / gridResolution);
-                    const gridY = Math.floor(cy / gridResolution);
+                    let potentialChange = (mpi - cyclone.windSpeed) * 0.011 * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
+                    const dryness = Math.max(0, 1 - (currentRH / 0.85)) * Math.max(0.2, 1 - (cyclone.moveSpeedKph / 80));
+                    if (potentialChange > 0) potentialChange *= (1 - dryness);
+                    const directWeakening = dryness * 0.25 * ((cyclone.windSpeed / 40) ** 0.5);
+                    const shearWeakening = (currentVws * 0.05) * (1 - Math.min(1, (cyclone.windSpeed / 100)**2)) * (cyclone.windSpeed / 100);
                     
-                    // Read Dry Air
-                    if (dryAirData && dryAirData[gridY] && dryAirData[gridY][gridX] !== undefined) {
-                        currentRH = dryAirData[gridY][gridX];
-                        humidityEl.textContent = `${(currentRH * 100).toFixed(0)}%`;
-                    }
-                    
-                    // Read VWS
-                    if (vwsData && vwsData[gridY] && vwsData[gridY][gridX] !== undefined) {
-                        currentVws = vwsData[gridY][gridX];
-                        vwsEl.textContent = `${currentVws.toFixed(1)}`;
-                    }
+                    cyclone.windSpeed += potentialChange - directWeakening - shearWeakening;
+                    updateSSTAndDraw(cx, cy, 30);
+                    moistenEnvironment(cx, cy);
 
-                    if (currentSST !== null) {
-                        mpi = calculateMPI(currentSST);
-                        mpiEl.textContent = mpi.toFixed(1);
-                        
-                        const strengtheningFactor = 0.011;
-                        let potentialChange = (mpi - cyclone.windSpeed) * strengtheningFactor * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
-
-                        // Dry Air Effect
-                        const dryness = Math.max(0, 1 - (currentRH / 0.85));
-                        const moveSpeedFactor = Math.max(0.2, 1 - (cyclone.moveSpeedKph / 80));
-                        const totalDrynessEffect = dryness * moveSpeedFactor;
-                        if (potentialChange > 0) {
-                            potentialChange *= (1 - totalDrynessEffect);
-                        }
-                        const directWeakening = totalDrynessEffect * 0.25 * ((cyclone.windSpeed / 40) ** 0.5);
-
-                        // VWS Effect
-                        const shearResistance = (cyclone.windSpeed / 100)**2; // Strong storms resist shear better
-                        const shearWeakening = (currentVws * 0.05) * (1 - Math.min(1, shearResistance)) * (cyclone.windSpeed / 100);
-                        
-                        cyclone.windSpeed += potentialChange - directWeakening - shearWeakening;
-
-                        updateSSTAndDraw(cx, cy, 30);
-                        moistenEnvironment(cx, cy);
-
-                        const transitionThreshold = 25;
-                        if (currentSST < transitionThreshold) {
-                            const transitionRate = (transitionThreshold - currentSST) * 0.7;
-                            cyclone.extratropicalTransition += transitionRate;
-                        } else {
-                            cyclone.extratropicalTransition -= 0.2;
-                        }
+                    if (currentSST < 25) {
+                        cyclone.extratropicalTransition += (25 - currentSST) * 0.7;
                     } else {
-                        mpiEl.textContent = 'N/A';
+                        cyclone.extratropicalTransition -= 0.2;
                     }
+                    cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
+                } else {
+                    mpiEl.textContent = 'N/A';
                 }
             }
             
-            cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
-
             pathCounter++;
-            if (pathCounter % 5 === 0) {
-                cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
-            }
+            if (pathCounter % 5 === 0) cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
             if (pathCounter % 15 === 0) {
                 updateBestTrackReport();
                 gameTime.setHours(gameTime.getHours() + 6);
-                const pixelDist = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2);
-                const distKm = pixelDist * kmPerPixel;
+                const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
                 cyclone.moveSpeedKph = distKm / 6;
                 cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
                 updateDryAirLayer();
@@ -747,8 +683,13 @@
             }
 
             cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
-            cyclone.maxWindSpeed = Math.max(cyclone.maxWindSpeed, cyclone.windSpeed);
             cyclone.pressure = calculatePressureFromMS(cyclone.windSpeed);
+            
+            // MODIFIED: Update minPressure when maxWindSpeed is updated
+            if (cyclone.windSpeed > cyclone.maxWindSpeed) {
+                cyclone.maxWindSpeed = cyclone.windSpeed;
+                cyclone.minPressure = cyclone.pressure;
+            }
             
             updateUI();
 
@@ -756,8 +697,8 @@
             cyclone.size = 10 + cyclone.windSpeed * 0.2;
             cycloneEl.style.width = `${cyclone.size}px`; cycloneEl.style.height = `${cyclone.size}px`;
 
-            if (cyclone.windSpeed < 10) { endGame('dissipated'); }
-            else if (cyclone.extratropicalTransition >= 100) { endGame('transitioned'); }
+            if (cyclone.windSpeed < 10) endGame('dissipated');
+            else if (cyclone.extratropicalTransition >= 100) endGame('transitioned');
 
             drawFullBackground();
             drawPath();
@@ -772,62 +713,41 @@
             maxWindSpeedEl.textContent = cyclone.maxWindSpeed.toFixed(1);
             pressureEl.textContent = cyclone.pressure;
             aceEl.textContent = cyclone.ace.toFixed(4);
-            let currentCategory = categories[0].name;
+            let currentCategory = categories.find(cat => cyclone.windSpeed >= cat.min) || categories[0];
             for (let i = categories.length - 1; i >= 0; i--) {
                 if (cyclone.windSpeed >= categories[i].min) {
-                    currentCategory = categories[i].name; break;
+                    currentCategory = categories[i]; break;
                 }
             }
-            categoryEl.textContent = currentCategory;
-            if (cyclone.extratropicalTransition > 0) {
-                transitionContainer.style.display = 'block';
-                transitionBar.style.width = `${cyclone.extratropicalTransition}%`;
-            } else {
-                transitionContainer.style.display = 'none';
-            }
+            categoryEl.textContent = currentCategory.name;
+            transitionContainer.style.display = cyclone.extratropicalTransition > 0 ? 'block' : 'none';
+            transitionBar.style.width = `${cyclone.extratropicalTransition}%`;
             moveSpeedEl.textContent = isNaN(cyclone.moveSpeedKph) ? '0' : (cyclone.moveSpeedKph).toFixed(0);
-            const year = gameTime.getFullYear();
-            const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
-            const day = gameTime.getDate().toString().padStart(2, '0');
-            const hour = gameTime.getHours().toString().padStart(2, '0');
-            gameTimeEl.textContent = `${year}-${month}-${day} ${hour}Z`;
+            gameTimeEl.textContent = `${gameTime.getFullYear()}-${(gameTime.getMonth() + 1).toString().padStart(2, '0')}-${gameTime.getDate().toString().padStart(2, '0')} ${gameTime.getHours().toString().padStart(2, '0')}Z`;
         }
 
         function calculatePressureFromMS(windSpeedInMs) {
-            const windKnots = windSpeedInMs; // Convert m/s to knots
-            if (windKnots < 15) {
-                const knots = 15;
-                return Math.round(-0.0001573 * Math.pow(knots, 3) + 0.01632 * Math.pow(knots, 2) - 1.995 * knots + 1030);
-            } else if (windKnots <= 90) {
-                return Math.round(-0.0001573 * Math.pow(windKnots, 3) + 0.01632 * Math.pow(windKnots, 2) - 1.995 * windKnots + 1030);
-            } else {
-                const basePressureAt90kts = 865;
-                const slope = -2.55;
-                return Math.round(basePressureAt90kts + (windKnots - 90) * slope);
-            }
+            const k = windSpeedInMs;
+            if (k < 15) return Math.round(-0.0001573*15**3+0.01632*15**2-1.995*15+1030);
+            if (k <= 90) return Math.round(-0.0001573*k**3+0.01632*k**2-1.995*k+1030);
+            return Math.round(865 + (k - 90) * -2.55);
         }
 
         function updateBestTrackReport() {
             if (!projection) return;
             const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
-            const latStr = `${Math.abs(Math.round(lat * 10))}${lat >= 0 ? 'N' : 'S'}`;
-            const lonStr = `${Math.abs(Math.round(lon * 10))}${lon >= 0 ? 'E' : 'W'}`;
-            const windKnots = Math.round(cyclone.windSpeed / 0.51444);
-            const roundedWindKnots = Math.round(windKnots / 5) * 5;
-            if (roundedWindKnots >= 34) {
-                cyclone.ace += (roundedWindKnots ** 2) / 10000;
-            }
-            const pressure = cyclone.pressure;
-            const year = gameTime.getFullYear();
-            const month = (gameTime.getMonth() + 1).toString().padStart(2, '0');
-            const day = gameTime.getDate().toString().padStart(2, '0');
-            const hour = gameTime.getHours().toString().padStart(2, '0');
-            const timeStr = `${year}${month}${day}${hour}`;
-            const reportLine = `WP, 70, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${roundedWindKnots}, ${pressure}`;
+            const latStr = `${Math.abs(Math.round(lat*10))}${lat>=0?'N':'S'}`;
+            const lonStr = `${Math.abs(Math.round(lon*10))}${lon>=0?'E':'W'}`;
+            const roundedWindKnots = Math.round(cyclone.windSpeed / 0.51444 / 5) * 5;
+            if (roundedWindKnots >= 34) cyclone.ace += (roundedWindKnots**2)/10000;
+            const timeStr = `${gameTime.getFullYear()}${(gameTime.getMonth()+1).toString().padStart(2,'0')}${gameTime.getDate().toString().padStart(2,'0')}${gameTime.getHours().toString().padStart(2,'0')}`;
+            // MODIFIED: Use simulationCount for the report line
+            const reportLine = `WP, ${simulationCount.toString().padStart(2, '0')}, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${roundedWindKnots}, ${cyclone.pressure}`;
             bestTrackHistory.push(reportLine);
         }
 
         async function startGame(isFullReset = false) {
+            
             if (animationFrameId) { cancelAnimationFrame(animationFrameId); }
             await setup(isFullReset);
             canMove = false;
@@ -835,53 +755,43 @@
             gameLoop();
         }
 
-        // --- ADDED: New music control logic ---
         const musicControl = document.getElementById('music-control');
         const musicIcon = document.getElementById('music-icon');
         const bgMusic = document.getElementById('bg-music');
-        bgMusic.volume = 0.4; // Set initial volume
+        bgMusic.volume = 0.4;
 
         musicControl.addEventListener('click', () => {
             if (bgMusic.paused) {
-                bgMusic.play().catch(error => {
-                    console.error("Music playback failed:", error);
-                });
-                musicIcon.classList.add('text-green-400'); // Visual feedback: playing
+                bgMusic.play().catch(e => console.error("Music failed:", e));
+                musicIcon.classList.add('text-green-400');
             } else {
                 bgMusic.pause();
-                musicIcon.classList.remove('text-green-400'); // Visual feedback: paused
+                musicIcon.classList.remove('text-green-400');
             }
         });
 
-        window.addEventListener('mousemove', (e) => {
+        window.addEventListener('mousemove', e => {
             const rect = canvas.getBoundingClientRect();
             mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
         });
 
-
         window.addEventListener('resize', () => startGame(true));
 
-        window.addEventListener('keydown', (e) => {
+        window.addEventListener('keydown', e => {
             if (isGameOver && e.code === 'Space') {
+                simulationCount++; // CORRECT: Increment count before starting the next round.
                 startGame(false);
                 return;
             }
-        
             if (e.code === 'KeyD') {
                 isDryAirVisible = !isDryAirVisible;
                 toggleDryAirBtn.textContent = `干空气 (${isDryAirVisible ? '显示' : '隐藏'})`;
-                drawContourLayer(dryAirCtx, isDryAirVisible, dryAirData, dryAirContourColors, contourPathGenerator);
             }
-        
             if (e.code === 'KeyV') {
                 isVwsVisible = !isVwsVisible;
                 toggleVwsBtn.textContent = `风切变 (${isVwsVisible ? '显示' : '隐藏'})`;
-                drawContourLayer(vwsCtx, isVwsVisible, vwsData, vwsContourColors, contourPathGenerator);
             }
-        
-            if (e.code === 'KeyG' && !isGameOver) {
-                endGame('terminated');
-            }
+            if (e.code === 'KeyG' && !isGameOver) endGame('terminated');
         });
 
         showReportBtn.addEventListener('click', () => {
@@ -889,34 +799,77 @@
             reportModal.style.display = 'flex';
         });
 
-        closeReportBtn.addEventListener('click', () => {
-            reportModal.style.display = 'none';
-        });
+        closeReportBtn.addEventListener('click', () => reportModal.style.display = 'none');
         
-        climateSlider.addEventListener('change', () => { startGame(false); });
-        dryAirSlider.addEventListener('change', () => { startGame(false); });
-        vwsSlider.addEventListener('change', () => { startGame(false); });
+        // MODIFIED: Increment the round number when a parameter slider is changed
+        climateSlider.addEventListener('change', () => {
+            simulationCount++;
+            startGame(false);
+        });
+        dryAirSlider.addEventListener('change', () => {
+            simulationCount++;
+            startGame(false);
+        });
+        vwsSlider.addEventListener('change', () => {
+            simulationCount++;
+            startGame(false);
+        });
 
         toggleDryAirBtn.addEventListener('click', () => {
             isDryAirVisible = !isDryAirVisible;
             toggleDryAirBtn.textContent = `干空气 (${isDryAirVisible ? '显示' : '隐藏'})`;
-            drawContourLayer(dryAirCtx, isDryAirVisible, dryAirData, dryAirContourColors, contourPathGenerator);
         });
 
         toggleVwsBtn.addEventListener('click', () => {
             isVwsVisible = !isVwsVisible;
             toggleVwsBtn.textContent = `风切变 (${isVwsVisible ? '显示' : '隐藏'})`;
-            drawContourLayer(vwsCtx, isVwsVisible, vwsData, vwsContourColors, contourPathGenerator);
+        });
+        
+        // --- ADDED: Event listeners and functions for simulation history ---
+        
+        function populateRecordList() {
+            recordList.innerHTML = '';
+            if (simulationHistory.length === 0) {
+                recordList.innerHTML = '<p class="text-gray-400">暂无历史记录。</p>';
+                return;
+            }
+
+            simulationHistory.forEach(sim => {
+                const maxWindKnots = Math.round((sim.maxWind / 0.51444) / 5) * 5;
+                const simDiv = document.createElement('div');
+                simDiv.className = 'p-2 hover:bg-gray-700 cursor-pointer rounded';
+                simDiv.innerHTML = `
+                    <span class="font-bold text-cyan-400">WP${sim.round.toString().padStart(2, '0')}</span>
+                    <span class="ml-4">MAX ${maxWindKnots}KT</span>
+                    <span class="ml-4">${sim.minPressure}hPa</span>
+                `;
+                simDiv.onclick = () => {
+                    recordModal.style.display = 'none';
+                    reportContent.textContent = sim.bst.join('\n');
+                    reportModal.style.display = 'flex';
+                };
+                recordList.appendChild(simDiv);
+            });
+        }
+
+        recordButton.addEventListener('click', () => {
+            populateRecordList();
+            recordModal.style.display = 'flex';
+        });
+
+        closeRecordBtn.addEventListener('click', () => {
+            recordModal.style.display = 'none';
         });
 
         window.addEventListener('load', async () => {
             try {
                 initializeColorScale();
-                worldData = await d3.json('https://unpkg.com/world-atlas@2/countries-110m.json');
-                await startGame(true);
+                worldData = await d3.json('countries-110m.json');
+                simulationCount = 1;
+                await startGame(true); // Start the very first game
                 loadingScreen.style.display = 'none';
             } catch (error) {
-                console.error("Failed to load world map data:", error);
+                console.error("Failed to load map data:", error);
                 loadingError.textContent = '无法加载地图数据，请检查您的网络连接。';
                 loadingError.style.display = 'block';
             }
