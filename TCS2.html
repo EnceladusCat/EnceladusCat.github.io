@@ -59,6 +59,7 @@
 <body class="bg-gray-900 flex flex-col items-center justify-center h-screen">
 
     <div id="loading-screen" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center">
+        <audio id="bg-music" loop src="remix1.mp3"></audio>
         <h2 class="text-white text-3xl font-bold mb-6" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">正在生成环境场...</h2>
         <div class="w-1/2 max-w-md h-2.5 bg-gray-700 rounded-full overflow-hidden">
             <div id="loading-bar-inner" class="w-1/4 h-full bg-white rounded-full"></div>
@@ -71,11 +72,11 @@
     <div id="controls-container" class="text-white text-center mb-4 w-full max-w-4xl flex space-x-4">
         <div id="climate-control" class="flex-1">
             <label for="climate-slider" class="block mb-2 font-bold">海温控制工具</label>
-            <input id="climate-slider" type="range" min="0" max="2" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+            <input id="climate-slider" type="range" min="0" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             <div class="flex justify-between text-xs w-full mt-1 px-1">
                 <span>第四纪冰期</span>
                 <span>现代</span>
-                <span>三叠纪早期</span>
+                <span>三叠纪暖期</span>
             </div>
         </div>
         <div id="dry-air-control" class="flex-1">
@@ -150,7 +151,10 @@
             </div>
         </div>
     </div>
-
+    <div id="music-control" class="fixed top-4 left-4 bg-gray-800/60 backdrop-blur-sm text-white p-3 rounded-lg flex items-center space-x-3 shadow-lg z-30 select-none cursor-pointer">
+        <span id="music-icon" class="text-3xl" style="font-family: 'Times New Roman', serif;">♪</span>
+        <span class="text-lg font-bold">— Into the Vortex(remix)</span>
+    </div>
     <script>
         // Get DOM elements
         const canvas = document.getElementById('gameCanvas');
@@ -205,7 +209,6 @@
         let landMask;
         let kmPerPixel = 0;
         let contourPathGenerator;
-
         // Environmental state variables
         let dryAirData, vwsData;
         let gridResolution = 3;
@@ -236,11 +239,7 @@
 
         const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
-        const climateSettings = [
-            { name: '第四纪冰期', minTemp: 0, maxTemp: 28 },
-            { name: '现代', minTemp: 13, maxTemp: 33 },
-            { name: '三叠纪早期', minTemp: 22, maxTemp: 39 }
-        ];
+        // MODIFIED: Removed the discrete climateSettings array
 
         const categories = [
             { min: 0, name: "热带低压 (TD)", color: '#FFFFFF' },
@@ -276,7 +275,7 @@
             // MODIFIED: Set VWS movement to be west-to-east
             vwsMovement = { dx: 1, dy: 0 };
 
-            cyclone.x = width * (0.4 + Math.random() * 0.5);
+            cyclone.x = width * (0.2 + Math.random() * 0.7);
             cyclone.y = height * (0.9 - Math.random() * 0.4);
             cyclone.windSpeed = 12; cyclone.maxWindSpeed = 12;
             cyclone.extratropicalTransition = 0; cyclone.lastReportX = cyclone.x;
@@ -329,10 +328,28 @@
             };
         }
 
+        // MODIFIED: This function now interpolates temperatures for a smooth transition
         function initializeSST() {
-            const currentSetting = climateSettings[parseInt(climateSlider.value)];
-            const maxTemp = currentSetting.maxTemp;
-            const minTemp = currentSetting.minTemp;
+            const climateValue = parseInt(climateSlider.value); // Value from 0 to 100
+            let minTemp, maxTemp;
+
+            // Define the key temperature points for interpolation
+            const iceAge = { min: 0, max: 28 };
+            const modern = { min: 13, max: 33 };
+            const triassic = { min: 22, max: 39 };
+
+            if (climateValue <= 50) {
+                // Interpolate between Cooler (0) and Modern (50)
+                const t = climateValue / 50;
+                minTemp = iceAge.min * (1 - t) + modern.min * t;
+                maxTemp = iceAge.max * (1 - t) + modern.max * t;
+            } else {
+                // Interpolate between Modern (50) and Warmer (100)
+                const t = (climateValue - 50) / 50;
+                minTemp = modern.min * (1 - t) + triassic.min * t;
+                maxTemp = modern.max * (1 - t) + triassic.max * t;
+            }
+            
             sstData = [];
             for (let y = 0; y < height; y++) {
                 const row = [];
@@ -359,59 +376,59 @@
         }
 
         function initializeDryAir() {
-                    dryAirData = [];
-                    const intensity = parseInt(dryAirSlider.value) / 100;
-                    const baseRH = 1.00 - (intensity * 0.4);
-                    const dryFactor = 0.7 * intensity;
-                    const gridWidth = Math.ceil(width / gridResolution);
-                    const gridHeight = Math.ceil(height / gridResolution);
+                    dryAirData = [];
+                    const intensity = parseInt(dryAirSlider.value) / 100;
+                    const baseRH = 1.00 - (intensity * 0.4);
+                    const dryFactor = 0.7 * intensity;
+                    const gridWidth = Math.ceil(width / gridResolution);
+                    const gridHeight = Math.ceil(height / gridResolution);
 
-                    // Randomize the number and properties of dry air "blobs"
-                    const numBlobs = 2 + Math.floor(Math.random() * 2); // Generate 2 or 3 blobs
-                    const blobs = [];
-                    for (let i = 0; i < numBlobs; i++) {
-                        blobs.push({
-                            x: width * (Math.random() * 0.9 + 0.05),    // Random x position
-                            y: height * (Math.random() * 0.8 + 0.1),    // Random y position
-                            sigmaX: width * (Math.random() * 0.15 + 0.2), // Random width
-                            sigmaY: height * (Math.random() * 0.2 + 0.25),// Random height
-                            strength: (Math.random() * 0.5 + 0.7)        // Random strength multiplier
-                        });
-                    }
+                    // Randomize the number and properties of dry air "blobs"
+                    const numBlobs = 2 + Math.floor(Math.random() * 2); // Generate 2 or 3 blobs
+                    const blobs = [];
+                    for (let i = 0; i < numBlobs; i++) {
+                        blobs.push({
+                            x: width * (Math.random() * 0.9 + 0.05),     // Random x position
+                            y: height * (Math.random() * 0.8 + 0.1),    // Random y position
+                            sigmaX: width * (Math.random() * 0.15 + 0.2), // Random width
+                            sigmaY: height * (Math.random() * 0.2 + 0.25),// Random height
+                            strength: (Math.random() * 0.5 + 0.7)       // Random strength multiplier
+                        });
+                    }
 
-                    // Randomize background noise parameters
-                    const noiseParams = {
-                        freqX: 60 + Math.random() * 40,
-                        freqY: 80 + Math.random() * 40,
-                        offsetX: Math.random() * 1000,
-                        offsetY: Math.random() * 1000,
-                        amplitude: 0.03 + Math.random() * 0.04
-                    };
+                    // Randomize background noise parameters
+                    const noiseParams = {
+                        freqX: 60 + Math.random() * 40,
+                        freqY: 80 + Math.random() * 40,
+                        offsetX: Math.random() * 1000,
+                        offsetY: Math.random() * 1000,
+                        amplitude: 0.03 + Math.random() * 0.04
+                    };
 
-                    for (let y = 0; y < gridHeight; y++) {
-                        const row = [];
-                        for (let x = 0; x < gridWidth; x++) {
-                            const scaledX = x * gridResolution;
-                            const scaledY = y * gridResolution;
+                    for (let y = 0; y < gridHeight; y++) {
+                        const row = [];
+                        for (let x = 0; x < gridWidth; x++) {
+                            const scaledX = x * gridResolution;
+                            const scaledY = y * gridResolution;
 
-                            // Calculate the combined drying effect from all blobs
-                            let blobEffect = 0;
-                            blobs.forEach(blob => {
-                                const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
-                                blobEffect += Math.exp(exponent) * blob.strength;
-                            });
+                            // Calculate the combined drying effect from all blobs
+                            let blobEffect = 0;
+                            blobs.forEach(blob => {
+                                const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
+                                blobEffect += Math.exp(exponent) * blob.strength;
+                            });
 
-                            // Calculate the randomized background noise
-                            const noise = Math.sin((scaledX + noiseParams.offsetX) / noiseParams.freqX) * Math.cos((scaledY + noiseParams.offsetY) / noiseParams.freqY) * noiseParams.amplitude;
+                            // Calculate the randomized background noise
+                            const noise = Math.sin((scaledX + noiseParams.offsetX) / noiseParams.freqX) * Math.cos((scaledY + noiseParams.offsetY) / noiseParams.freqY) * noiseParams.amplitude;
 
-                            // Combine all factors to determine the final relative humidity (rh)
-                            let rh = baseRH - (blobEffect * dryFactor) + noise;
+                            // Combine all factors to determine the final relative humidity (rh)
+                            let rh = baseRH - (blobEffect * dryFactor) + noise;
 
-                            row.push(Math.max(0.15, Math.min(0.98, rh)));
-                        }
-                        dryAirData.push(row);
-                    }
-                }
+                            row.push(Math.max(0.15, Math.min(0.98, rh)));
+                        }
+                        dryAirData.push(row);
+                    }
+                }
         
         // MODIFIED: Function to generate a more complex, localized, and random VWS field
         function initializeVws() {
@@ -691,8 +708,8 @@
                         const directWeakening = totalDrynessEffect * 0.25 * ((cyclone.windSpeed / 40) ** 0.5);
 
                         // VWS Effect
-                        const shearResistance = (cyclone.windSpeed / 60)**2; // Strong storms resist shear better
-                        const shearWeakening = (currentVws / 20) * 0.2 * (1 - Math.min(1, shearResistance));
+                        const shearResistance = (cyclone.windSpeed / 100)**2; // Strong storms resist shear better
+                        const shearWeakening = (currentVws * 0.05) * (1 - Math.min(1, shearResistance)) * (cyclone.windSpeed / 100);
                         
                         cyclone.windSpeed += potentialChange - directWeakening - shearWeakening;
 
@@ -818,10 +835,29 @@
             gameLoop();
         }
 
+        // --- ADDED: New music control logic ---
+        const musicControl = document.getElementById('music-control');
+        const musicIcon = document.getElementById('music-icon');
+        const bgMusic = document.getElementById('bg-music');
+        bgMusic.volume = 0.4; // Set initial volume
+
+        musicControl.addEventListener('click', () => {
+            if (bgMusic.paused) {
+                bgMusic.play().catch(error => {
+                    console.error("Music playback failed:", error);
+                });
+                musicIcon.classList.add('text-green-400'); // Visual feedback: playing
+            } else {
+                bgMusic.pause();
+                musicIcon.classList.remove('text-green-400'); // Visual feedback: paused
+            }
+        });
+
         window.addEventListener('mousemove', (e) => {
             const rect = canvas.getBoundingClientRect();
             mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
         });
+
 
         window.addEventListener('resize', () => startGame(true));
 
