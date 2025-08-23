@@ -320,7 +320,7 @@
                 coordinates: [[
                     [120.8, 22.5], [121.5, 23.5], [121.4, 24.5], [121.0, 24.0], [120.8, 22.5]
                 ]],
-                elevation: 35 // 在0-255范围内，表示一个较高的海拔
+                elevation: 125 // 在0-255范围内，表示一个较高的海拔
             },
             // 菲律宾吕宋岛北部山脉
             luzon_cordillera: {
@@ -328,10 +328,10 @@
                 coordinates: [[
                     [120.6, 16.0], [121.8, 18.0], [121.2, 18.2], [120.5, 16.5], [120.6, 16.0]
                 ]],
-                elevation: 65 // 海拔中等偏高
+                elevation: 55 // 海拔中等偏高
             },
-            // 日本本州中部山脉 (日本阿尔卑斯)
-            japan_alps: {
+            // 青藏高原
+            tibet_alps: {
                 type: "Polygon",
                 coordinates: [[
                     [75.0, 36.0], [79.0, 30.6], [86.5, 27.7], [97.4, 29.0], [75.0, 36.0]
@@ -779,17 +779,17 @@
                 const elevation = getElevationAt(cx, cy); // 获取当前位置海拔 (0-255)
 
                 // 基础削弱因子（模拟陆地摩擦力）
-                const baseFrictionFactor = 0.016;
+                const baseFrictionFactor = 0.012;
 
                 // 地形破坏因子。海拔越高，破坏力越强。
-                const terrainDisruptionMultiplier = 1.5;
+                const terrainDisruptionMultiplier = 2.0;
                 const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
 
                 // 结合基础摩擦和地形破坏
                 const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
 
                 // 应用削弱
-                cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
+                cyclone.windSpeed -= (cyclone.windSpeed - 7) * totalWeakeningFactor;
                 
                 // 原有逻辑
                 cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
@@ -1015,7 +1015,7 @@
             mapCtx.strokeStyle = 'black';
             mapCtx.lineWidth = 1;
             mapCtx.textAlign = 'left';
-            mapCtx.textBaseline = 'top';
+            mapCtx.textBaseline = 'bottom';
             
             const stormId = `WP${simulationCount.toString().padStart(2, '0')}`;
             const maxWindKnots = Math.round((cyclone.maxWindSpeed / 0.51444) / 5) * 5;
