@@ -50,12 +50,39 @@
             overflow-y: auto;
         }
         #loading-bar-inner {
+            /* 保持原有的动画，但注意，这里不再需要 position: relative */
             animation: indeterminate-progress 2s infinite ease-in-out;
         }
+
+        /* 这是为猫咪图标设置的全新样式 */
+        #loading-cat-icon {
+            position: absolute;
+            
+            /* 把它放在最顶层 */
+            z-index: 10;
+
+            /* 设置图标的尺寸 */
+            width: 250px;  /* <--- 在这里调整猫咪的宽度 */
+            height: 250px; /* <--- 在这里调整猫咪的高度 */
+
+            /* 关键一步：把它在水平和垂直方向都居中于进度条轨道 */
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+            /* 应用猫咪的图片 */
+            background-image: url('Hi.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        
         @keyframes indeterminate-progress {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(400%); }
         }
+
+    </style>
     </style>
 </head>
 <body class="bg-gray-900 flex flex-col items-center justify-center h-screen">
@@ -63,8 +90,11 @@
     <div id="loading-screen" class="absolute inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center">
         <audio id="bg-music" loop src="TCG - Original.m4a"></audio>
         <h2 class="text-white text-3xl font-bold mb-6" style="font-family: 'ZCOOL+XiaoWei', sans-serif;">正在生成环境场...</h2>
-        <div class="w-1/2 max-w-md h-2.5 bg-gray-700 rounded-full overflow-hidden">
-            <div id="loading-bar-inner" class="w-1/4 h-full bg-white rounded-full"></div>
+        <div class="relative w-1/2 max-w-md">
+            <div class="w-full h-2.5 bg-gray-700 rounded-full overflow-hidden">
+                <div id="loading-bar-inner" class="h-full bg-white rounded-full"></div>
+            </div>
+            <div id="loading-cat-icon"></div>
         </div>
         <p id="loading-error" class="text-red-500 mt-4 hidden"></p>
     </div>
