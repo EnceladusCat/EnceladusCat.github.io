@@ -255,6 +255,7 @@
         let landMask;
         let kmPerPixel = 0;
         let contourPathGenerator;
+        let terrainCanvas, terrainCtx; // 新增：用于程序化地形
 
         // ADDED: Variables for simulation history
         let simulationCount = 0;
@@ -275,16 +276,45 @@
         };
         
         const vwsContourColors = {
-             10: 'rgba(0, 255, 0, 0.7)',
+            10: 'rgba(0, 255, 0, 0.7)',
             20: 'rgba(255, 255, 0, 0.7)',
             30: 'rgba(255, 0, 0, 0.7)',
             40: 'rgba(255, 0, 255, 0.7)'
         };
+        
+        // === 新增：定义主要地形特征 (经纬度坐标) ===
+        const terrainFeatures = {
+            // 台湾中央山脉 (简化多边形)
+            taiwan_mountains: {
+                type: "Polygon",
+                coordinates: [[
+                    [120.8, 22.5], [121.5, 23.5], [121.4, 24.5], [121.0, 24.0], [120.8, 22.5]
+                ]],
+                elevation: 35 // 在0-255范围内，表示一个较高的海拔
+            },
+            // 菲律宾吕宋岛北部山脉
+            luzon_cordillera: {
+                type: "Polygon",
+                coordinates: [[
+                    [120.6, 16.0], [121.8, 18.0], [121.2, 18.2], [120.5, 16.5], [120.6, 16.0]
+                ]],
+                elevation: 65 // 海拔中等偏高
+            },
+            // 日本本州中部山脉 (日本阿尔卑斯)
+            japan_alps: {
+                type: "Polygon",
+                coordinates: [[
+                    [75.0, 36.0], [79.0, 30.6], [86.5, 27.7], [97.4, 29.0], [75.0, 36.0]
+                ]],
+                elevation: 255
+            }
+        };
+
 
         const cyclone = {
             x: 0, y: 0,
             windSpeed: 12, pressure: 1005, size: 20,
-            maxWindSpeed: 12, minPressure: 1005, // ADDED minPressure
+            maxWindSpeed: 12, minPressure: 1005,
             extratropicalTransition: 0, ace: 0,
             moveSpeedKph: 0, lastReportX: 0, lastReportY: 0,
         };
@@ -300,14 +330,13 @@
             { min: 51.0, name: "超强台风 (SuperTY)", color: '#FF0000' },
         ];
         const BST_DOT_COLORS = [
-            // Saffir-Simpson Hurricane Wind Scale (SSHWS)
-            { min: 0,    name: "热带低压 (TD)", color: '#FFFFFF' },        // < 34 knots
-            { min: 34,   name: "热带风暴 (TS)", color: '#00FFFC' },        // 34-63 knots
-            { min: 64,   name: "一级台风 (CAT1)", color: '#FFFB90' },        // 64-82 knots
-            { min: 83,   name: "二级台风 (CAT2)", color: '#FFB933' },        // 83-95 knots
-            { min: 96,   name: "三级台风 (CAT3)", color: '#FF6600' },        // 96-112 knots (Major)
-            { min: 113,  name: "四级台风 (CAT4)", color: '#EB3700' },        // 113-136 knots (Major)
-            { min: 137,  name: "五级台风 (CAT5)", color: '#8F0000' }         // >= 137 knots (Major)
+            { min: 0,   name: "热带低压 (TD)", color: '#FFFFFF' },
+            { min: 34,  name: "热带风暴 (TS)", color: '#00FFFC' },
+            { min: 64,  name: "一级台风 (CAT1)", color: '#FFFB90' },
+            { min: 83,  name: "二级台风 (CAT2)", color: '#FFB933' },
+            { min: 96,  name: "三级台风 (CAT3)", color: '#FF6600' },
+            { min: 113, name: "四级台风 (CAT4)", color: '#EB3700' },
+            { min: 137, name: "五级台风 (CAT5)", color: '#8F0000' }
         ];
         function initializeColorScale() {
             sstColorScale = d3.scaleLinear()
@@ -336,12 +365,12 @@
             cyclone.x = width * (0.2 + Math.random() * 0.7);
             cyclone.y = height * (0.9 - Math.random() * 0.4);
             cyclone.windSpeed = 12; cyclone.maxWindSpeed = 12;
-            cyclone.minPressure = 1005; // Reset min pressure
+            cyclone.minPressure = 1005;
             cyclone.extratropicalTransition = 0; cyclone.lastReportX = cyclone.x;
             cyclone.lastReportY = cyclone.y; cyclone.moveSpeedKph = 0;
             cyclone.ace = 0;
 
-            bstPointsForMap = []; 
+            bstPointsForMap = [];
 
             cyclonePath = []; pathCounter = 0;
             gameTime = new Date(2025, 7, 14, 0); bestTrackHistory = [];
@@ -356,6 +385,7 @@
                 const mapWidthKm = mapWidthDegrees * kmPerDegreeAtEquator;
                 kmPerPixel = mapWidthKm / width;
                 generateLandMask();
+                generateAndDrawTerrain(); // 生成地形图
             }
 
             initializeSST();
@@ -565,11 +595,45 @@
             landPath = new Path2D();
             pathGenerator.context(landPath)(geojson);
         }
+        
+        // === 新增：程序化生成并绘制地形图到内存 Canvas ===
+        function generateAndDrawTerrain() {
+            if (!projection) return; // 必须在 projection 初始化后运行
+
+            terrainCanvas = document.createElement('canvas');
+            terrainCtx = terrainCanvas.getContext('2d', { willReadFrequently: true });
+            terrainCanvas.width = width;
+            terrainCanvas.height = height;
+
+            // 1. 将整个地形图背景填充为黑色 (海平面, 海拔0)
+            terrainCtx.fillStyle = 'rgb(0, 0, 0)';
+            terrainCtx.fillRect(0, 0, width, height);
+            
+            // 2. 使用与主地图相同的 d3 path generator
+            const terrainPathGenerator = d3.geoPath(projection).context(terrainCtx);
+
+            // 3. 遍历我们定义的地形特征并绘制它们
+            for (const key in terrainFeatures) {
+                const feature = terrainFeatures[key];
+                const elevation = feature.elevation;
+                
+                // 设置填充颜色，灰度值 = 海拔值
+                terrainCtx.fillStyle = `rgb(${elevation}, ${elevation}, ${elevation})`;
+
+                // 绘制地形
+                terrainCtx.beginPath();
+                terrainPathGenerator(feature);
+                terrainCtx.fill();
+            }
+            console.log("程序化地形图生成成功。");
+        }
+
 
         function drawLand() {
             if (!landPath) return;
-            ctx.fillStyle = '#645545'; ctx.fill(landPath);
-            ctx.strokeStyle = '#916e66'; ctx.lineWidth = 1; ctx.stroke(landPath);
+            ctx.fillStyle = '#645545';
+            ctx.fill(landPath);
+            // 国界线已被移除
         }
 
         function drawFullBackground() {
@@ -611,20 +675,15 @@
             }
             return categories[0].color;
         }
-        // ...紧跟在 getCategoryColor(windSpeed) 函数之后
 
-        // === 新增：专门为BST路径图圆点获取颜色的函数 ===
         function getBstDotColor(windSpeedInMs) {
-            // 首先，将m/s转换为海里/小时（节），这是BST的标准单位
             const windSpeedKnots = windSpeedInMs / 0.51444;
-
-            // 从最强等级开始反向遍历，找到对应的颜色
             for (let i = BST_DOT_COLORS.length - 1; i >= 0; i--) {
                 if (windSpeedKnots >= BST_DOT_COLORS[i].min) {
                     return BST_DOT_COLORS[i].color;
                 }
             }
-            return BST_DOT_COLORS[0].color; // 默认返回最弱等级的颜色
+            return BST_DOT_COLORS[0].color;
         }
         
         function drawPath() {
@@ -640,13 +699,12 @@
             isGameOver = true;
             cancelAnimationFrame(animationFrameId);
             
-            // ADDED: Save simulation results to history
             simulationHistory.push({
                 round: simulationCount,
                 maxWind: cyclone.maxWindSpeed,
                 minPressure: cyclone.minPressure,
                 tace: cyclone.ace.toFixed(4),
-                bst: [...bestTrackHistory] // Copy the array
+                bst: [...bestTrackHistory]
             });
 
             switch(reason) {
@@ -664,6 +722,16 @@
             return Math.min(120, 131.28 * (1 - Math.exp(-0.182 * (sst - 25.50))));
         }
 
+        // === 新增：从地形Canvas获取海拔值的辅助函数 ===
+        function getElevationAt(px, py) {
+            if (!terrainCanvas) {
+                return 0; // 如果地形图未加载，则返回0海拔
+            }
+            // 从地形图中读取像素数据。我们只需要R、G、B中的任何一个值，因为它是灰度图
+            const pixelData = terrainCtx.getImageData(Math.round(px), Math.round(py), 1, 1).data;
+            return pixelData[0]; // 返回R值 (0-255)
+        }
+
         function gameLoop() {
             if (isGameOver) return;
 
@@ -677,9 +745,27 @@
             let currentSST = null, mpi = 0, currentRH = 0.5, currentVws = 0;
 
             if (landMask && landMask(cx, cy)) {
-                cyclone.windSpeed -= (cyclone.windSpeed - 5) * 0.02;
+                // === 地形影响逻辑 ===
+                const elevation = getElevationAt(cx, cy); // 获取当前位置海拔 (0-255)
+
+                // 基础削弱因子（模拟陆地摩擦力）
+                const baseFrictionFactor = 0.016;
+
+                // 地形破坏因子。海拔越高，破坏力越强。
+                const terrainDisruptionMultiplier = 1.5;
+                const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
+
+                // 结合基础摩擦和地形破坏
+                const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
+
+                // 应用削弱
+                cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
+                
+                // 原有逻辑
                 cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
-                mpiEl.textContent = '陆地'; humidityEl.textContent = 'N/A'; vwsEl.textContent = 'N/A';
+                mpiEl.textContent = `陆地`; // 在UI上显示海拔值
+                humidityEl.textContent = 'N/A';
+                vwsEl.textContent = 'N/A';
             } else if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy]?.[cx] !== undefined) {
                 currentSST = sstData[cy][cx];
                 const gridX = Math.floor(cx / gridResolution);
@@ -734,7 +820,6 @@
             cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
             cyclone.pressure = calculatePressureFromMS(cyclone.windSpeed);
             
-            // MODIFIED: Update minPressure when maxWindSpeed is updated
             if (cyclone.windSpeed > cyclone.maxWindSpeed) {
                 cyclone.maxWindSpeed = cyclone.windSpeed;
                 cyclone.minPressure = cyclone.pressure;
@@ -770,9 +855,7 @@
             }
             categoryEl.textContent = currentCategory.name;
             
-            // --- 新增的代码行 ---
             cycloneEl.style.backgroundColor = currentCategory.color;
-            // --------------------
 
             transitionContainer.style.display = cyclone.extratropicalTransition > 0 ? 'block' : 'none';
             transitionBar.style.width = `${cyclone.extratropicalTransition}%`;
@@ -790,8 +873,6 @@
         function updateBestTrackReport() {
             if (!projection) return;
 
-            // === 新增逻辑：存储绘图点 ===
-            // 我们存储原始的画布坐标和风速，用于后续绘图
             bstPointsForMap.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
 
             const [lon, lat] = projection.invert([cyclone.x, cyclone.y]);
@@ -803,15 +884,13 @@
             const reportLine = `WP, ${simulationCount.toString().padStart(2, '0')}, ${timeStr}, , BEST, 0, ${latStr}, ${lonStr}, ${roundedWindKnots}, ${cyclone.pressure}`;
             bestTrackHistory.push(reportLine);
         }
-                                                                               
-        // === 替换掉您原来的整个 generatePathMap 函数 ===
+                                        
         function generatePathMap() {
             if (bstPointsForMap.length < 2 || !projection) {
                 alert("路径点不足，无法生成地图。");
                 return;
             }
 
-            // 1. 计算路径的地理边界框
             let minLon = 180, maxLon = -180, minLat = 90, maxLat = -90;
             bstPointsForMap.forEach(p => {
                 const [lon, lat] = projection.invert([p.x, p.y]);
@@ -821,7 +900,6 @@
                 maxLat = Math.max(maxLat, lat);
             });
 
-            // 2. 强制执行最小地理范围 (10纬度 x 20经度)
             let geoHeight = maxLat - minLat;
             let geoWidth = maxLon - minLon;
             if (geoWidth < 20) {
@@ -835,7 +913,6 @@
                 maxLat += heightDeficit / 2;
             }
             
-            // 3. 将地理边界转换回像素坐标并添加留白
             const padding = 50;
             const [minX_raw, maxY_raw] = projection([minLon, minLat]);
             const [maxX_raw, minY_raw] = projection([maxLon, maxLat]);
@@ -844,51 +921,42 @@
             let minY = Math.max(0, minY_raw - padding);
             let maxY = Math.min(height, maxY_raw + padding);
 
-            // 4. === 新增：强制执行 2:1 的长宽比 ===
             let viewWidth = maxX - minX;
             let viewHeight = maxY - minY;
             const targetAspectRatio = 2.0;
 
             if (viewWidth / viewHeight < targetAspectRatio) {
-                // 视图太高，需要加宽
                 const newWidth = viewHeight * targetAspectRatio;
                 const widthToAdd = newWidth - viewWidth;
                 minX -= widthToAdd / 2;
                 maxX += widthToAdd / 2;
             } else if (viewWidth / viewHeight > targetAspectRatio) {
-                // 视图太宽，需要加高
                 const newHeight = viewWidth / targetAspectRatio;
                 const heightToAdd = newHeight - viewHeight;
                 minY -= heightToAdd / 2;
                 maxY += heightToAdd / 2;
             }
 
-            // 5. 根据最终确定的视图范围创建Canvas
             const mapWidth = Math.round(maxX - minX);
             const mapHeight = Math.round(maxY - minY);
             if (mapWidth <= 0 || mapHeight <= 0) {
-                 alert("计算出的地图范围无效，无法生成。");
-                 return;
+                alert("计算出的地图范围无效，无法生成。");
+                return;
             }
             const mapCanvas = document.createElement('canvas');
             mapCanvas.width = mapWidth;
             mapCanvas.height = mapHeight;
             const mapCtx = mapCanvas.getContext('2d');
 
-            // 6. 绘制背景和被裁剪的陆地
             mapCtx.fillStyle = '#2c3e50';
             mapCtx.fillRect(0, 0, mapWidth, mapHeight);
             
             mapCtx.save();
             mapCtx.translate(-minX, -minY);
             mapCtx.fillStyle = '#645545';
-            mapCtx.fill(landPath);
-            mapCtx.strokeStyle = '#916e66';
-            mapCtx.lineWidth = 1;
-            mapCtx.stroke(landPath);
+            mapCtx.fill(landPath); // 绘制陆地，无国界线
             mapCtx.restore();
 
-            // 7. 绘制Wiki风格的路径
             mapCtx.beginPath();
             mapCtx.moveTo(bstPointsForMap[0].x - minX, bstPointsForMap[0].y - minY);
             for (let i = 1; i < bstPointsForMap.length; i++) {
@@ -911,12 +979,11 @@
                 mapCtx.stroke();
             });
 
-            // 8. === 新增：在左上角绘制信息文本 ===
-            const fontSize = Math.max(8, Math.round(mapHeight / 64));
+            const fontSize = Math.max(12, Math.round(mapHeight / 64));
             mapCtx.font = `bold ${fontSize}px sans-serif`;
             mapCtx.fillStyle = 'white';
             mapCtx.strokeStyle = 'black';
-            mapCtx.lineWidth = 1; // 使用描边代替阴影，效果更清晰
+            mapCtx.lineWidth = 1;
             mapCtx.textAlign = 'left';
             mapCtx.textBaseline = 'top';
             
@@ -926,17 +993,13 @@
             const signature = 'Generated by TyS@Enceladus';
             
             const textPadding = 20;
-            // 描边
             mapCtx.strokeText(stormId, textPadding, textPadding);
             mapCtx.strokeText(maxWindText, textPadding, textPadding + fontSize * 1.3);
             mapCtx.strokeText(signature, textPadding, textPadding + fontSize * 2.6);
-            // 填充
             mapCtx.fillText(stormId, textPadding, textPadding);
             mapCtx.fillText(maxWindText, textPadding, textPadding + fontSize * 1.3);
             mapCtx.fillText(signature, textPadding, textPadding + fontSize * 2.6);
 
-
-            // 9. 将Canvas内容转换为图片并显示
             const dataUrl = mapCanvas.toDataURL('image/png');
             pathMapImage.src = dataUrl;
             downloadMapBtn.href = dataUrl;
@@ -976,7 +1039,7 @@
 
         window.addEventListener('keydown', e => {
             if (isGameOver && e.code === 'Space') {
-                simulationCount++; // CORRECT: Increment count before starting the next round.
+                simulationCount++;
                 startGame(false);
                 return;
             }
@@ -998,7 +1061,6 @@
 
         closeReportBtn.addEventListener('click', () => reportModal.style.display = 'none');
         
-        // MODIFIED: Increment the round number when a parameter slider is changed
         climateSlider.addEventListener('change', () => {
             simulationCount++;
             startGame(false);
@@ -1021,8 +1083,6 @@
             isVwsVisible = !isVwsVisible;
             toggleVwsBtn.textContent = `风切变 (${isVwsVisible ? '显示' : '隐藏'})`;
         });
-        
-        // --- ADDED: Event listeners and functions for simulation history ---
         
         function populateRecordList() {
             recordList.innerHTML = '';
@@ -1071,7 +1131,7 @@
                 loadingScreen.style.display = 'none';
             } catch (error) {
                 console.error("Failed to load map data:", error);
-                loadingError.textContent = '无法加载地图数据，请检查您的网络连接。';
+                loadingError.textContent = '无法加载地图数据，请检查您的网络连接以及countries-110m.json文件是否存在。';
                 loadingError.style.display = 'block';
             }
         });
