@@ -651,7 +651,7 @@
                     y: cell_y,
                     baseSigmaX: baseSigmaX,
                     sigmaX: baseSigmaX,
-                    sigmaY: height * (0.1 + Math.random() * 0.1),
+                    sigmaY: height * (0.1 + Math.random() * 0.3),
                     strength: strength,
                     velocityX: (Math.random() - 0.5) * 1.5,
                     oscillationPhase: Math.random() * Math.PI * 2,
@@ -685,7 +685,7 @@
                             freqY: 10 + Math.random() * 5,
                             offsetX: Math.random() * 1000,
                             offsetY: Math.random() * 1000,
-                            amplitude: 0 + Math.random() * 0.5
+                            amplitude: 0 + Math.random() * 0.8
                         }
                     ]
                 });
@@ -1142,8 +1142,8 @@ function drawEnsemblePath() {
                                                                                    
                                                                                    if (landMask && landMask(cx_logic, cy_logic)) {
                                                                                        const elevation = getElevationAt(cx_logic, cy_logic);
-                                                                                       const baseFrictionFactor = 0.009;
-                                                                                       const terrainDisruptionMultiplier = 3.0;
+                                                                                       const baseFrictionFactor = 0.005;
+                                                                                       const terrainDisruptionMultiplier = 5.0;
                                                                                        const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
                                                                                        const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
                                                                                        cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
@@ -1153,6 +1153,7 @@ function drawEnsemblePath() {
                                                                                            const currentSST = sstData[cy_logic][cx_logic];
                                                                                            const gridX = Math.floor(cx_logic / gridResolution);
                                                                                            const gridY = Math.floor(cy_logic / gridResolution);
+                                                                                           const environmentPressure = highPressureData?.[gridY]?.[gridX] || 1012;
                                                                                            const currentRH = dryAirData?.[gridY]?.[gridX] || 0.85;
                                                                                            const currentVws = vwsData?.[gridY]?.[gridX] || 0;
                                                                                            const mpi = calculateMPI(currentSST);
@@ -1167,7 +1168,7 @@ function drawEnsemblePath() {
                                                                                            updateSSTAndDraw(cx_logic, cy_logic, 30);
                                                                                            moistenEnvironment(cx_logic, cy_logic);
 
-                                                                                           if (currentSST < 25) {
+                                                                                           if (currentSST < 25 && environmentPressure < 1006) {
                                                                                                cyclone.extratropicalTransition += (25 - currentSST) * 2.0;
                                                                                            } else {
                                                                                                cyclone.extratropicalTransition -= 0.2;
@@ -1389,7 +1390,7 @@ function drawEnsemblePath() {
                 mapCtx.stroke();
             });
 
-            const fontSize = Math.min(16, Math.round(mapHeight / 50));
+            const fontSize = Math.max(16, Math.round(mapHeight / 50));
             mapCtx.font = `bold ${fontSize}px sans-serif`;
             mapCtx.fillStyle = 'white';
             mapCtx.strokeStyle = 'black';
