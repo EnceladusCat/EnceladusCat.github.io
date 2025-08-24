@@ -399,7 +399,7 @@
             // Set up the world map and land mask first
             if (isFullReset || !landPath) {
                 await defineLand();
-                const mapWidthDegrees = 120;
+                const mapWidthDegrees = 100;
                 const kmPerDegreeAtEquator = 111.32;
                 const mapWidthKm = mapWidthDegrees * kmPerDegreeAtEquator;
                 kmPerPixel = mapWidthKm / width;
@@ -1200,7 +1200,7 @@ function drawEnsemblePath() {
                 updateBestTrackReport();
                 gameTime.setHours(gameTime.getHours() + 6);
                 const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
-                cyclone.moveSpeedKph = distKm / 9;
+                cyclone.moveSpeedKph = distKm / 6;
                 cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
                 updateDryAirLayer();
                 updateVwsLayer();
