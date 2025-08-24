@@ -1200,7 +1200,7 @@ function drawEnsemblePath() {
                 updateBestTrackReport();
                 gameTime.setHours(gameTime.getHours() + 6);
                 const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
-                cyclone.moveSpeedKph = distKm / 6;
+                cyclone.moveSpeedKph = distKm / 9;
                 cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
                 updateDryAirLayer();
                 updateVwsLayer();
