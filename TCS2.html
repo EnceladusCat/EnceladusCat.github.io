@@ -827,7 +827,7 @@
                     updateSSTAndDraw(cx, cy, 30);
                     moistenEnvironment(cx, cy);
 
-                    if (currentSST < 25) {
+                    if (currentSST < 25 || currentVws > 10) {
                         cyclone.extratropicalTransition += (25 - currentSST) * 1.0;
                     } else {
                         cyclone.extratropicalTransition -= 0.2;
