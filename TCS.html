@@ -176,7 +176,7 @@
                 <div class="flex space-x-2 mt-2">
                     <button id="toggleDryAirBtn" class="flex-1 bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-3 rounded-lg text-sm">干空气 (显示)</button>
                     <button id="toggleVwsBtn" class="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-lg text-sm">风切变 (显示)</button>
-                    <button id="toggleHighPressureBtn" class="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-1 px-3 rounded-lg text-sm">高压 (隐藏)</button>
+                    <button id="toggleHighPressureBtn" class="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-1 px-3 rounded-lg text-sm">高压 (显示)</button>
                 </div>
                 <p class="text-xs mt-2">快捷键: D(干空气) V(风切变) H(高压) G(终止) 1(GFS) 2(EPS)</p>
             </div>
@@ -233,6 +233,10 @@
         <span class="text-3xl">🕹️</span>
         <span class="text-lg font-bold">手动模式</span>
     </a>
+    <div id="speed-control" class="fixed top-52 left-4 bg-gray-800/60 backdrop-blur-sm text-white p-3 rounded-lg flex items-center space-x-3 shadow-lg z-30 select-none cursor-pointer">
+        <span class="text-3xl">⏩</span>
+        <span id="speed-mode" class="text-lg font-bold">1倍速度</span>
+    </div>
     <script>
         // Get DOM elements
         const canvas = document.getElementById('gameCanvas');
@@ -285,7 +289,8 @@
         const pathMapImage = document.getElementById('pathMapImage');
         const closePathMapBtn = document.getElementById('closePathMapBtn');
         const downloadMapBtn = document.getElementById('downloadMapBtn');
-
+        const speedControlBtn = document.getElementById('speed-control');
+        const speedModeEl = document.getElementById('speed-mode');
         // Game state variables
         let width, height;
         let sstData;
@@ -317,10 +322,11 @@
         let isHighPressureVisible = true;
         let isForecastPathVisible = true;
         let isEnsemblePathVisible = false;
+        let speedMultiplier = 1; // NEW: 全局速度倍数
         
         let vwsMovement = { dx: 0, dy: 0 };
         let bstPointsForMap = [];
-        
+        let globalSpeed = 1;
         const dryAirContourColors = {
             0.4: 'rgba(139, 69, 19, 0.7)', 0.5: 'rgba(160, 82, 45, 0.7)',
             0.6: 'rgba(205, 133, 63, 0.7)', 0.7: 'rgba(218, 165, 32, 0.7)'
@@ -1029,7 +1035,7 @@ function drawEnsemblePath() {
     const originalDryAirData = JSON.parse(JSON.stringify(dryAirData));
     const originalSstData = JSON.parse(JSON.stringify(sstData));
 
-    const perturbationX = [50, -50, 70, 40, -40, 20, -20, -70];
+    const perturbationX = [50, -50, 70, 100, -100, 20, -20, -70];
     const perturbationY = [70, -70, 50, -10, 90, -10, 20, -20];
     const vwsPerturbationDx = [0.2, -0.2, 0.1, -0.1, 0, 0, 0.4, -0.4];
     const vwsPerturbationDy = [0, 0, 0.1, -0.1, 0.2, -0.2, 0, 0];
@@ -1093,150 +1099,163 @@ function drawEnsemblePath() {
     }
 }
 
-        function gameLoop() {
-            if (isGameOver) return;
+                                                                           function gameLoop() {
+                                                                               if (isGameOver) {
+                                                                                   cancelAnimationFrame(animationFrameId);
+                                                                                   return;
+                                                                               }
 
-            // --- 逻辑第一步：每一帧都更新高压系统的动态 ---
-            updateHighPressureSystem();  // 更新所有高压单体的位置和形状
-            generateHighPressureField(); // 根据更新后的数据重新生成气压场
+                                                                               // --- 1. 逻辑更新循环 (只进行计算) ---
+                                                                               for (let i = 0; i < speedMultiplier; i++) {
+                                                                                   if (isGameOver) break;
 
-            const cx = Math.floor(cyclone.x);
-            const cy = Math.floor(cyclone.y);
+                                                                                   updateHighPressureSystem();
+                                                                                   generateHighPressureField();
 
-            // --- 逻辑第二步：气旋根据最新的气压场进行移动 ---
-            if (highPressureData) {
-                const gridX = Math.floor(cx / gridResolution);
-                const gridY = Math.floor(cy / gridResolution);
-                const gridWidth = highPressureData[0].length;
-                const gridHeight = highPressureData.length;
+                                                                                   const cx_logic = Math.floor(cyclone.x);
+                                                                                   const cy_logic = Math.floor(cyclone.y);
 
-                if (gridX > 0 && gridX < gridWidth - 1 && gridY > 0 && gridY < gridHeight - 1) {
-                    const p_x_plus = highPressureData[gridY][gridX + 1];
-                    const p_x_minus = highPressureData[gridY][gridX - 1];
-                    const p_y_plus = highPressureData[gridY + 1][gridX];
-                    const p_y_minus = highPressureData[gridY - 1][gridX];
-                    const gradX = p_x_plus - p_x_minus;
-                    const gradY = p_y_plus - p_y_minus;
-                    const gradMagnitude = Math.sqrt(gradX**2 + gradY**2);
+                                                                                   if (highPressureData) {
+                                                                                       const gridX = Math.floor(cx_logic / gridResolution);
+                                                                                       const gridY = Math.floor(cy_logic / gridResolution);
+                                                                                       if (gridX > 0 && gridX < highPressureData[0].length - 1 && gridY > 0 && gridY < highPressureData.length - 1) {
+                                                                                           const p_x_plus = highPressureData[gridY][gridX + 1];
+                                                                                           const p_x_minus = highPressureData[gridY][gridX - 1];
+                                                                                           const p_y_plus = highPressureData[gridY + 1][gridX];
+                                                                                           const p_y_minus = highPressureData[gridY - 1][gridX];
+                                                                                           const gradX = p_x_plus - p_x_minus;
+                                                                                           const gradY = p_y_plus - p_y_minus;
+                                                                                           const gradMagnitude = Math.sqrt(gradX**2 + gradY**2);
+                                                                                           const betaDriftX = -0.4;
+                                                                                           const betaDriftY = -0.2;
+                                                                                           if (gradMagnitude > 0.001) {
+                                                                                               const normalizedDirX = gradY / gradMagnitude;
+                                                                                               const normalizedDirY = -gradX / gradMagnitude;
+                                                                                               const speed = 1.1 * gradMagnitude;
+                                                                                               cyclone.x += normalizedDirX * speed;
+                                                                                               cyclone.y += normalizedDirY * speed;
+                                                                                               cyclone.x += betaDriftX;
+                                                                                               cyclone.y += betaDriftY;
+                                                                                           }
+                                                                                       }
+                                                                                   }
+                                                                                   
+                                                                                   if (landMask && landMask(cx_logic, cy_logic)) {
+                                                                                       const elevation = getElevationAt(cx_logic, cy_logic);
+                                                                                       const baseFrictionFactor = 0.009;
+                                                                                       const terrainDisruptionMultiplier = 3.0;
+                                                                                       const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
+                                                                                       const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
+                                                                                       cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
+                                                                                       cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
+                                                                                   } else {
+                                                                                       if (cy_logic >= 0 && cy_logic < height && cx_logic >= 0 && cx_logic < width && sstData[cy_logic]?.[cx_logic] !== null) {
+                                                                                           const currentSST = sstData[cy_logic][cx_logic];
+                                                                                           const gridX = Math.floor(cx_logic / gridResolution);
+                                                                                           const gridY = Math.floor(cy_logic / gridResolution);
+                                                                                           const currentRH = dryAirData?.[gridY]?.[gridX] || 0.85;
+                                                                                           const currentVws = vwsData?.[gridY]?.[gridX] || 0;
+                                                                                           const mpi = calculateMPI(currentSST);
+                                                                                           
+                                                                                           let potentialChange = (mpi - cyclone.windSpeed) * 0.011 * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
+                                                                                           const dryness = Math.max(0, 1 - (currentRH / 0.85)) * Math.max(0.2, 1 - (cyclone.moveSpeedKph / 80));
+                                                                                           if (potentialChange > 0) potentialChange *= (1 - dryness);
+                                                                                           const directWeakening = dryness * 0.25 * ((cyclone.windSpeed / 40) ** 0.5);
+                                                                                           const shearWeakening = (currentVws * 0.05) * (1 - Math.min(1,(cyclone.windSpeed / 100)**2)) * (cyclone.windSpeed / 100);
+                                                                                           
+                                                                                           cyclone.windSpeed += potentialChange - directWeakening - shearWeakening;
+                                                                                           updateSSTAndDraw(cx_logic, cy_logic, 30);
+                                                                                           moistenEnvironment(cx_logic, cy_logic);
 
-                    const betaDriftX = -0.4; // Constant westward push
-                    const betaDriftY = -0.2; // Constant northward push
+                                                                                           if (currentSST < 25) {
+                                                                                               cyclone.extratropicalTransition += (25 - currentSST) * 2.0;
+                                                                                           } else {
+                                                                                               cyclone.extratropicalTransition -= 0.2;
+                                                                                           }
+                                                                                           cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
+                                                                                       }
+                                                                                   }
+                                                                                   
+                                                                                   pathCounter++;
+                                                                                   if (pathCounter % 5 === 0) cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
+                                                                                   if (pathCounter % 15 === 0) {
+                                                                                       updateBestTrackReport();
+                                                                                       gameTime.setHours(gameTime.getHours() + 6);
+                                                                                       const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
+                                                                                       cyclone.moveSpeedKph = distKm / 6;
+                                                                                       cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
+                                                                                       updateDryAirLayer();
+                                                                                       updateVwsLayer();
+                                                                                   }
 
-                    // In the gameLoop function, inside the highPressureData check
-                    if (gradMagnitude > 0.001) {
-                        const normalizedDirX = gradY / gradMagnitude;
-                        const normalizedDirY = -gradX / gradMagnitude;
-                        const speed = 1.1 * gradMagnitude;
+                                                                                   cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
+                                                                                   cyclone.pressure = calculatePressureFromMS(cyclone.windSpeed);
+                                                                                   if (cyclone.windSpeed > cyclone.maxWindSpeed) {
+                                                                                       cyclone.maxWindSpeed = cyclone.windSpeed;
+                                                                                       cyclone.minPressure = cyclone.pressure;
+                                                                                   }
 
-                        // Apply the pressure gradient force
-                        cyclone.x += normalizedDirX * speed;
-                        cyclone.y += normalizedDirY * speed;
+                                                                                   const edgePadding = 5;
+                                                                                   if (cyclone.x < edgePadding || cyclone.x > width - edgePadding || cyclone.y < edgePadding || cyclone.y > height - edgePadding) {
+                                                                                       endGame('moved_out_of_bounds');
+                                                                                   } else if (cyclone.windSpeed < 10) {
+                                                                                       endGame('dissipated');
+                                                                                   } else if (cyclone.extratropicalTransition >= 100) {
+                                                                                       endGame('transitioned');
+                                                                                   }
+                                                                               } // --- 逻辑更新循环到此结束 ---
 
-                        // Apply the new Beta drift force
-                        cyclone.x += betaDriftX;
-                        cyclone.y += betaDriftY;
-                    }
-                }
-            }
-            
-            // --- 逻辑第三步：气旋物理与环境交互 ---
-            let currentSST = null, mpi = 0, currentRH = 0.5, currentVws = 0;
 
-            if (landMask && landMask(cx, cy)) {
-                // ... (陆地交互逻辑)
-                const elevation = getElevationAt(cx, cy);
-                const baseFrictionFactor = 0.009;
-                const terrainDisruptionMultiplier = 3.0;
-                const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
-                const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
-                cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
-                cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
-                mpiEl.textContent = `陆地`;
-                humidityEl.textContent = 'N/A';
-                vwsEl.textContent = 'N/A';
-            } else if (cy >= 0 && cy < height && cx >= 0 && cx < width && sstData[cy]?.[cx] !== undefined) {
-                currentSST = sstData[cy][cx];
-                const gridX = Math.floor(cx / gridResolution);
-                const gridY = Math.floor(cy / gridResolution);
-                
-                if (dryAirData?.[gridY]?.[gridX] !== undefined) {
-                    currentRH = dryAirData[gridY][gridX];
-                    humidityEl.textContent = `${(currentRH * 100).toFixed(0)}%`;
-                }
-                if (vwsData?.[gridY]?.[gridX] !== undefined) {
-                    currentVws = vwsData[gridY][gridX];
-                    vwsEl.textContent = `${currentVws.toFixed(1)}`;
-                }
-                if (currentSST !== null) {
-                    mpi = calculateMPI(currentSST);
-                    mpiEl.textContent = mpi.toFixed(1);
-                    
-                    let potentialChange = (mpi - cyclone.windSpeed) * 0.011 * ((Math.min(cyclone.windSpeed, 30) / 30)**1.5);
-                    const dryness = Math.max(0, 1 - (currentRH / 0.85)) * Math.max(0.2, 1 - (cyclone.moveSpeedKph / 80));
-                    if (potentialChange > 0) potentialChange *= (1 - dryness);
-                    const directWeakening = dryness * 0.25 * ((cyclone.windSpeed / 40) ** 0.5);
-                    const shearWeakening = (currentVws * 0.05) * (1 - Math.min(1, (cyclone.windSpeed / 100)**2)) * (cyclone.windSpeed / 100);
-                    
-                    cyclone.windSpeed += potentialChange - directWeakening - shearWeakening;
-                    updateSSTAndDraw(cx, cy, 30);
-                    moistenEnvironment(cx, cy);
+                                                                               // --- 2. 统一渲染 (只执行一次) ---
+                                                                               if (!isGameOver) {
+                                                                                   // v-- 核心修复：在这里重新获取环境数据并更新UI --v
+                                                                                   const cx_render = Math.floor(cyclone.x);
+                                                                                   const cy_render = Math.floor(cyclone.y);
+                                                                                   if (landMask && landMask(cx_render, cy_render)) {
+                                                                                       mpiEl.textContent = '陆地';
+                                                                                       humidityEl.textContent = 'N/A';
+                                                                                       vwsEl.textContent = 'N/A';
+                                                                                   } else {
+                                                                                       if (cy_render >= 0 && cy_render < height && cx_render >= 0 && cx_render < width && sstData[cy_render]?.[cx_render] !== null) {
+                                                                                           const currentSST = sstData[cy_render][cx_render];
+                                                                                           const gridX = Math.floor(cx_render / gridResolution);
+                                                                                           const gridY = Math.floor(cy_render / gridResolution);
+                                                                                           
+                                                                                           const currentRH = dryAirData?.[gridY]?.[gridX] || 0.85;
+                                                                                           humidityEl.textContent = `${(currentRH * 100).toFixed(0)}%`;
+                                                                                           
+                                                                                           const currentVws = vwsData?.[gridY]?.[gridX] || 0;
+                                                                                           vwsEl.textContent = `${currentVws.toFixed(1)}`;
+                                                                                           
+                                                                                           const mpi = calculateMPI(currentSST);
+                                                                                           mpiEl.textContent = mpi.toFixed(1);
+                                                                                       } else {
+                                                                                           mpiEl.textContent = 'N/A';
+                                                                                           humidityEl.textContent = 'N/A';
+                                                                                           vwsEl.textContent = 'N/A';
+                                                                                       }
+                                                                                   }
+                                                                                   // ^-------------------------------------------^
 
-                    if (currentSST < 25) {
-                        cyclone.extratropicalTransition += (25 - currentSST) * 2.0;
-                    } else {
-                        cyclone.extratropicalTransition -= 0.2;
-                    }
-                    cyclone.extratropicalTransition = Math.max(0, Math.min(100, cyclone.extratropicalTransition));
-                } else {
-                    mpiEl.textContent = 'N/A';
-                }
-            }
-            
-            // --- 逻辑第四步：更新路径、时间和UI (部分低频更新) ---
-            pathCounter++;
+                                                                                   updateUI(); // 更新气旋自身状态的UI
 
-            if (pathCounter % 5 === 0) cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
-            if (pathCounter % 15 === 0) {
-                updateBestTrackReport();
-                gameTime.setHours(gameTime.getHours() + 6);
-                const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
-                cyclone.moveSpeedKph = distKm / 6;
-                cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
-                updateDryAirLayer();
-                updateVwsLayer();
-            }
+                                                                                   cycloneEl.style.left = `${cyclone.x}px`;
+                                                                                   cycloneEl.style.top = `${cyclone.y}px`;
+                                                                                   cyclone.size = 10 + cyclone.windSpeed * 0.2;
+                                                                                   cycloneEl.style.width = `${cyclone.size}px`;
+                                                                                   cycloneEl.style.height = `${cyclone.size}px`;
 
-            cyclone.windSpeed = Math.max(0, cyclone.windSpeed);
-            cyclone.pressure = calculatePressureFromMS(cyclone.windSpeed);
-            if (cyclone.windSpeed > cyclone.maxWindSpeed) {
-                cyclone.maxWindSpeed = cyclone.windSpeed;
-                cyclone.minPressure = cyclone.pressure;
-            }
-            updateUI();
-
-            cycloneEl.style.left = `${cyclone.x}px`; cycloneEl.style.top = `${cyclone.y}px`;
-            cyclone.size = 10 + cyclone.windSpeed * 0.2;
-            cycloneEl.style.width = `${cyclone.size}px`; cycloneEl.style.height = `${cyclone.size}px`;
-            const edgePadding = 5; // 留出一点边距，防止图标一半出去才结束
-            if (cyclone.x < edgePadding || cyclone.x > width - edgePadding ||
-                cyclone.y < edgePadding || cyclone.y > height - edgePadding) {
-                endGame('moved_out_of_bounds'); // 使用一个新的原因来结束游戏
-            } 
-            if (cyclone.windSpeed < 10) endGame('dissipated');
-            else if (cyclone.extratropicalTransition >= 100) endGame('transitioned');
-
-            drawFullBackground();
-            drawPath();
-            drawForecastPath(); // 新增：绘制预测路径
-            if (pathCounter % 1 === 0) {
-                drawEnsemblePath();
-            }
-            drawContourLayer(dryAirCtx, isDryAirVisible, dryAirData, dryAirContourColors, contourPathGenerator);
-            drawContourLayer(vwsCtx, isVwsVisible, vwsData, vwsContourColors, contourPathGenerator);
-            drawContourLayer(highPressureCtx, isHighPressureVisible, highPressureData, highPressureContourColors, contourPathGenerator);
-
-            animationFrameId = requestAnimationFrame(gameLoop);
-        }
+                                                                                   drawFullBackground();
+                                                                                   drawPath();
+                                                                                   drawForecastPath();
+                                                                                   drawEnsemblePath();
+                                                                                   drawContourLayer(dryAirCtx, isDryAirVisible, dryAirData, dryAirContourColors, contourPathGenerator);
+                                                                                   drawContourLayer(vwsCtx, isVwsVisible, vwsData, vwsContourColors, contourPathGenerator);
+                                                                                   drawContourLayer(highPressureCtx, isHighPressureVisible, highPressureData, highPressureContourColors, contourPathGenerator);
+                                                                               }
+                                                                               
+                                                                               animationFrameId = requestAnimationFrame(gameLoop);
+                                                                           }
 
         function updateUI() {
             windSpeedEl.textContent = cyclone.windSpeed.toFixed(1);
@@ -1517,6 +1536,19 @@ function drawEnsemblePath() {
         closePathMapBtn.addEventListener('click', () => {
             pathMapModal.style.display = 'none';
         });
+                                      // === 新增：为速度控制按钮绑定事件，这是之前缺失的关键部分 ===
+                                      speedControlBtn.addEventListener('click', () => {
+                                          if (speedMultiplier === 1) {
+                                              speedMultiplier = 2;
+                                              speedModeEl.textContent = '2倍速度';
+                                          } else if (speedMultiplier === 2) {
+                                              speedMultiplier = 4;
+                                              speedModeEl.textContent = '4倍速度';
+                                          } else {
+                                              speedMultiplier = 1;
+                                              speedModeEl.textContent = '1倍速度';
+                                          }
+                                      });
         window.addEventListener('load', async () => {
             try {
                 initializeColorScale();
@@ -1531,5 +1563,6 @@ function drawEnsemblePath() {
             }
         });
     </script>
+
 </body>
 </html>
