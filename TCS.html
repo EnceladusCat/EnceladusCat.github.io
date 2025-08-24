@@ -109,7 +109,7 @@
         </div>
         <div id="dry-air-control" class="flex-1">
             <label for="dry-air-slider" class="block mb-2 font-bold">干空气强度</label>
-            <input id="dry-air-slider" type="range" min="0" max="100" value="20" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+            <input id="dry-air-slider" type="range" min="0" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             <div class="flex justify-between text-xs w-full mt-1 px-1">
                 <span>湿润</span>
                 <span>中等</span>
@@ -127,7 +127,7 @@
         </div>
         <div id="high-pressure-control" class="flex-1">
             <label for="high-pressure-slider" class="block mb-2 font-bold">副热带高压纬度</label>
-            <input id="high-pressure-slider" type="range" min="0" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+            <input id="high-pressure-slider" type="range" min="0" max="100" value="60" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             <div class="flex justify-between text-xs w-full mt-1 px-1">
                 <span>南</span>
                 <span>中</span>
@@ -141,6 +141,7 @@
         <canvas id="dryAirCanvas"     style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 2; background-color: transparent;"></canvas>
         <canvas id="vwsCanvas"        style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; background-color: transparent;"></canvas>
         <canvas id="highPressureCanvas" style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 4; background-color: transparent;"></canvas>
+        <canvas id="ensembleCanvas"   style="position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; background-color: transparent;"></canvas>
 
         <div id="cyclone" class="z-10"></div>
 
@@ -247,7 +248,9 @@
         const vwsCtx = vwsCanvas.getContext('2d');
         const highPressureCanvas = document.getElementById('highPressureCanvas');
         const highPressureCtx = highPressureCanvas.getContext('2d');
-
+        const ensembleCanvas = document.getElementById('ensembleCanvas');
+        const ensembleCtx = ensembleCanvas.getContext('2d');
+        
         const vwsSlider = document.getElementById('vws-slider');
         const toggleVwsBtn = document.getElementById('toggleVwsBtn');
         const vwsEl = document.getElementById('vws');
@@ -313,6 +316,7 @@
         
         // === NEW: Global object for the dynamic high-pressure system ===
         let highPressureCells = [];
+        let dryAirBlobs = [];
         
         // Environmental state variables
         let dryAirData, vwsData, highPressureData;
@@ -398,6 +402,7 @@
             dryAirCanvas.width = width; dryAirCanvas.height = height;
             vwsCanvas.width = width; vwsCanvas.height = height;
             highPressureCanvas.width = width; highPressureCanvas.height = height;
+            ensembleCanvas.width = width; ensembleCanvas.height = height;
 
             contourPathGenerator = d3.geoPath();
             vwsMovement = { dx: 1, dy: 0 };
@@ -512,45 +517,77 @@
             }
         }
 
+        // === 替换 initializeDryAir：现在它只在模拟开始时生成一次随机干区 ===
         function initializeDryAir() {
-            dryAirData = [];
-            const intensity = parseInt(dryAirSlider.value) / 100;
-            const baseRH = 1.00 - (intensity * 0.4);
-            const dryFactor = 0.7 * intensity;
-            const gridWidth = Math.ceil(width / gridResolution);
-            const gridHeight = Math.ceil(height / gridResolution);
-            const numBlobs = 2 + Math.floor(Math.random() * 2);
-            const blobs = [];
+            dryAirBlobs = []; // 清空上一局的干区
+            const numBlobs = 2 + Math.floor(Math.random() * 9); // 2到4个随机干区
+
             for (let i = 0; i < numBlobs; i++) {
-                blobs.push({
+                dryAirBlobs.push({
                     x: width * (Math.random() * 0.9 + 0.05),
                     y: height * (Math.random() * 0.8 + 0.1),
-                    sigmaX: width * (Math.random() * 0.15 + 0.2),
-                    sigmaY: height * (Math.random() * 0.2 + 0.25),
-                    strength: (Math.random() * 0.5 + 0.7)
+                    sigmaX: width * (Math.random() * 0.15),
+                    sigmaY: height * (Math.random() * 0.2),
+                    // 每个干区有自己的干燥强度
+                    strength: (Math.random() * 0.20 + 0.10), // 干燥强度在 0.15 到 0.4 之间
+                    // 每个干区有自己的漂移速度
+                    velocityX: (Math.random() - 0.5) * 0.4,
+                    velocityY: (Math.random() - 0.5) * 0.2
                 });
             }
-            const noiseParams = {
-                freqX: 60 + Math.random() * 40, freqY: 80 + Math.random() * 40,
-                offsetX: Math.random() * 1000, offsetY: Math.random() * 1000,
-                amplitude: 0.03 + Math.random() * 0.04
-            };
+            
+            // 首次生成干空气场
+            generateDryAirField();
+        }
+
+        // === 替换 generateDryAirField：现在它会合并高压干燥和随机干区 ===
+        function generateDryAirField() {
+            if (!highPressureData) return;
+
+            dryAirData = [];
+            const intensity = parseInt(dryAirSlider.value) / 100;
+            const gridWidth = Math.ceil(width / gridResolution);
+            const gridHeight = Math.ceil(height / gridResolution);
+
+            // 1. 根据高压场计算基础湿度场 (这部分保持不变)
+            const basePressure = 1012;
+            const normalRH = 0.95 - (0.2 * intensity);
+            const dryingFactor = 0.01 * (1 + intensity);
+
             for (let y = 0; y < gridHeight; y++) {
                 const row = [];
                 for (let x = 0; x < gridWidth; x++) {
-                    const scaledX = x * gridResolution;
-                    const scaledY = y * gridResolution;
-                    let blobEffect = 0;
-                    blobs.forEach(blob => {
-                        const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
-                        blobEffect += Math.exp(exponent) * blob.strength;
-                    });
-                    const noise = Math.sin((scaledX + noiseParams.offsetX) / noiseParams.freqX) * Math.cos((scaledY + noiseParams.offsetY) / noiseParams.freqY) * noiseParams.amplitude;
-                    let rh = baseRH - (blobEffect * dryFactor) + noise;
-                    row.push(Math.max(0.15, Math.min(0.98, rh)));
+                    const pressure = highPressureData[y][x];
+                    const pressureDifference = pressure - basePressure;
+                    let rh = normalRH - (pressureDifference * dryingFactor);
+                    row.push(rh);
                 }
                 dryAirData.push(row);
             }
+
+            // 2. 将持久化的随机干区叠加到基础湿度场上
+            // v-- 核心修复：在这个循环中进行计算 --v
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    // a. 获取当前网格单元中心点的真实像素坐标
+                    const scaledX = x * gridResolution + gridResolution / 2;
+                    const scaledY = y * gridResolution + gridResolution / 2;
+                    
+                    let blobEffect = 0;
+                    dryAirBlobs.forEach(blob => {
+                        // b. 使用 scaledX 和 scaledY 进行高精度计算
+                        const exponent = -( ((scaledX - blob.x)**2 / (2 * blob.sigmaX**2)) + ((scaledY - blob.y)**2 / (2 * blob.sigmaY**2)) );
+                        blobEffect += Math.exp(exponent) * blob.strength;
+                    });
+
+                    // c. 将计算出的高精度效果应用到离散的网格数据上
+                    dryAirData[y][x] -= blobEffect;
+
+                    // d. 最终将湿度值限制在合理范围内
+                    dryAirData[y][x] = Math.max(0.10, Math.min(0.98, dryAirData[y][x]));
+                }
+            }
+            // ^------------------------------------^
         }
         
         function initializeVws() {
@@ -655,7 +692,7 @@
                     strength: strength,
                     velocityX: (Math.random() - 0.5) * 1.5,
                     oscillationPhase: Math.random() * Math.PI * 2,
-                    oscillationSpeed: 0.008 + Math.random() * 0.015,
+                    oscillationSpeed: 0.08 + Math.random() * 0.015,
                     oscillationAmount: 0.15 + Math.random() * 0.2,
                     
                     noiseLayers: [
@@ -681,11 +718,11 @@
                             amplitude: 1.5 + Math.random() * 1
                         },
                         {
-                            freqX: 10 + Math.random() * 5,
-                            freqY: 10 + Math.random() * 5,
+                            freqX: 6 + Math.random() * 6,
+                            freqY: 6 + Math.random() * 6,
                             offsetX: Math.random() * 1000,
                             offsetY: Math.random() * 1000,
-                            amplitude: 0 + Math.random() * 0.8
+                            amplitude: 0.2 + Math.random() * 0.4
                         }
                     ]
                 });
@@ -717,29 +754,37 @@
         function updateHighPressureSystem() {
             highPressureCells.forEach(cell => {
                 // 1. Update East-West position (drift)
-                cell.x += cell.velocityX;
+                cell.x += 2 * cell.velocityX;
 
                 // Reverse direction if it hits the screen edges to keep it in play
                 if (cell.x > width * 1.2 && cell.velocityX > 0) {
-                    cell.velocityX *= -1;
+                    cell.velocityX *= -2;
                 }
                 if (cell.x < -width * 0.2 && cell.velocityX < 0) {
-                    cell.velocityX *= -1;
+                    cell.velocityX *= -2;
                 }
 
                 // 2. Update East-West stretch/shrink (oscillation)
                 cell.oscillationPhase += cell.oscillationSpeed;
                 const stretch = Math.sin(cell.oscillationPhase) * cell.oscillationAmount;
-                cell.sigmaX = cell.baseSigmaX * (1 + stretch);
+                cell.sigmaX = cell.baseSigmaX * (2 + 2 * stretch);
             });
         }
         
-        function updateDryAirLayer() {
-            if (!dryAirData || dryAirData.length === 0) return;
-            for (let y = 0; y < dryAirData.length; y++) {
-                dryAirData[y].pop();
-                dryAirData[y].unshift(dryAirData[y][0]);
-            }
+        // === 新增：让持久化的随机干区缓慢漂移的函数 ===
+        function updateDryAirBlobs() {
+            dryAirBlobs.forEach(blob => {
+                blob.x += blob.velocityX;
+                blob.y += blob.velocityY;
+
+                // 简单的边界反弹逻辑，防止干区飘出地图
+                if ((blob.x > width && blob.velocityX > 0) || (blob.x < 0 && blob.velocityX < 0)) {
+                    blob.velocityX *= -1;
+                }
+                if ((blob.y > height && blob.velocityY > 0) || (blob.y < 0 && blob.velocityY < 0)) {
+                    blob.velocityY *= -1;
+                }
+            });
         }
 
         function updateVwsLayer() {
@@ -1025,6 +1070,7 @@ function drawForecastPath() {
     }
 }
 function drawEnsemblePath() {
+    ensembleCtx.clearRect(0, 0, width, height);
     if (!isEnsemblePathVisible) {
         return;
     }
@@ -1076,13 +1122,13 @@ function drawEnsemblePath() {
             ensemblePoints.forEach(endPoint => {
                 const color = getBstDotColor(startPoint.windSpeed);
                 
-                ctx.beginPath();
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([0, 0]); // 使用虚线
-                ctx.moveTo(startPoint.x, startPoint.y);
-                ctx.lineTo(endPoint.x, endPoint.y);
-                ctx.stroke();
+                ensembleCtx.beginPath();
+                ensembleCtx.strokeStyle = color;
+                ensembleCtx.lineWidth = 1.5;
+                ensembleCtx.setLineDash([0, 0]); // 使用虚线
+                ensembleCtx.moveTo(startPoint.x, startPoint.y);
+                ensembleCtx.lineTo(endPoint.x, endPoint.y);
+                ensembleCtx.stroke();
                 
                 startPoint = endPoint;
             });
@@ -1109,9 +1155,6 @@ function drawEnsemblePath() {
                                                                                for (let i = 0; i < speedMultiplier; i++) {
                                                                                    if (isGameOver) break;
 
-                                                                                   updateHighPressureSystem();
-                                                                                   generateHighPressureField();
-
                                                                                    const cx_logic = Math.floor(cyclone.x);
                                                                                    const cy_logic = Math.floor(cyclone.y);
 
@@ -1131,7 +1174,7 @@ function drawEnsemblePath() {
                                                                                            if (gradMagnitude > 0.001) {
                                                                                                const normalizedDirX = gradY / gradMagnitude;
                                                                                                const normalizedDirY = -gradX / gradMagnitude;
-                                                                                               const speed = 1.1 * gradMagnitude;
+                                                                                               const speed = 1.1 * (gradMagnitude + 0.2);
                                                                                                cyclone.x += normalizedDirX * speed;
                                                                                                cyclone.y += normalizedDirY * speed;
                                                                                                cyclone.x += betaDriftX;
@@ -1180,12 +1223,17 @@ function drawEnsemblePath() {
                                                                                    pathCounter++;
                                                                                    if (pathCounter % 5 === 0) cyclonePath.push({ x: cyclone.x, y: cyclone.y, windSpeed: cyclone.windSpeed });
                                                                                    if (pathCounter % 15 === 0) {
+                                                                                       updateHighPressureSystem();
+                                                                                       generateHighPressureField();
+                                                                                       generateDryAirField();
+                                                                                       updateDryAirBlobs();
+                                                                                       updateVwsLayer();
                                                                                        updateBestTrackReport();
                                                                                        gameTime.setHours(gameTime.getHours() + 6);
                                                                                        const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
                                                                                        cyclone.moveSpeedKph = distKm / 6;
                                                                                        cyclone.lastReportX = cyclone.x; cyclone.lastReportY = cyclone.y;
-                                                                                       updateDryAirLayer();
+                                                                                       updateDryAirBlobs();
                                                                                        updateVwsLayer();
                                                                                    }
 
@@ -1249,7 +1297,7 @@ function drawEnsemblePath() {
                                                                                    drawFullBackground();
                                                                                    drawPath();
                                                                                    drawForecastPath();
-                                                                                   drawEnsemblePath();
+                                                                                   if (pathCounter % 15 === 0) { drawEnsemblePath(); }
                                                                                    drawContourLayer(dryAirCtx, isDryAirVisible, dryAirData, dryAirContourColors, contourPathGenerator);
                                                                                    drawContourLayer(vwsCtx, isVwsVisible, vwsData, vwsContourColors, contourPathGenerator);
                                                                                    drawContourLayer(highPressureCtx, isHighPressureVisible, highPressureData, highPressureContourColors, contourPathGenerator);
