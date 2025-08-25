@@ -593,6 +593,7 @@
         function initializeVws() {
             vwsData = [];
             const intensity = parseInt(vwsSlider.value) / 50;
+            const highLatitudeValue = parseInt(highPressureSlider.value) / 100;
             const maxShear = 0 + intensity * 90;
             const gridWidth = Math.ceil(width / gridResolution);
             const gridHeight = Math.ceil(height / gridResolution);
@@ -606,7 +607,7 @@
                 for (let x = 0; x < gridWidth; x++) {
                     const scaledY = y * gridResolution;
                     const scaledX = x * gridResolution;
-                    const jetStrength = 0.5*Math.exp(-((scaledY - height * 0.01)**2) / (2 * (height*0.1)**2));
+                    const jetStrength = 0.5*Math.exp(-((scaledY - height * (1 * (0.7 - (highLatitudeValue * 0.5)-0.3)))**2) / (2 * (height*0.1)**2));
                     let shear = maxShear * jetStrength;
                     let localShearNoise = 0;
                     noiseParams.forEach(p => {
