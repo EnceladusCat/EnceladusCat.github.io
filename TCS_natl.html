@@ -695,7 +695,7 @@
 
             for (let i = 0; i < numCells; i++) {
                 const lat_randomness = (Math.random() - 0.5) * 0.2;
-                const cell_y = height * (0.65 - (highLatitudeValue * 0.4 + lat_randomness));
+                const cell_y = height * (0.7 - (0.5 * highLatitudeValue + lat_randomness));
                 const baseSigmaX = width * (0.2 + Math.random() * 0.1);
 
                 // 为第一个高压单体（i === 0）设置特殊的强度逻辑
@@ -754,7 +754,7 @@
                 });
             }
             // Add a powerful low-pressure cell at the northern edge
-            const lowPressureY = height * (0.65 - highLatitudeValue);
+            const lowPressureY = height * (0.7 - (0.5 * highLatitudeValue + lat_randomness)-0.2);
             if (lowPressureY > 0) {
                 highPressureCells.push({
                     x: width / 1.6, // Centered horizontally
