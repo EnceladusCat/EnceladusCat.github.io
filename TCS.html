@@ -609,7 +609,7 @@
                 for (let x = 0; x < gridWidth; x++) {
                     const scaledY = y * gridResolution;
                     const scaledX = x * gridResolution;
-                    const jetStrength = 0.5*Math.exp(-((scaledY - height * (1 * (0.7 - (highLatitudeValue * 0.5)-0.3)))**2) / (2 * (height*0.1)**2));
+                    const jetStrength = 0.5*Math.exp(-((scaledY - height * (1 * (0.7 - (highLatitudeValue * 0.5)-0.25)))**2) / (2 * (height*0.1)**2));
                     let shear = maxShear * jetStrength;
                     let localShearNoise = 0;
                     noiseParams.forEach(p => {
@@ -752,6 +752,27 @@
                     ]
                 });
             }
+            highPressureCells.push({
+                x: width / 2, // 位于地图中央
+                y: height * 1.0, // 位于地图偏北区域 (赤道附近)
+                baseSigmaX: width * 0.9, // 非常宽
+                sigmaX: width * 0.9,
+                sigmaY: height * 0.15, // 比较窄
+                strength: -(5 + Math.random() * 5), // 强度弱 (负值)
+                baseStrength: -(5 + Math.random() * 5),
+                velocityX: (Math.random() - 0.5) * 0.1, // 几乎不移动
+                // --- 关闭所有振荡 ---
+                oscillationPhase: 0,
+                oscillationSpeed: 0,
+                oscillationAmount: 0,
+                strengthOscillationPhase: 0,
+                strengthOscillationSpeed: 0,
+                strengthOscillationAmount: 0,
+                // --------------------
+                noiseLayers: [ // 一层简单的低频噪声
+                    { freqX: 400, freqY: 550, offsetX: Math.random() * 1000, offsetY: Math.random() * 1000, amplitude: 2 }
+                ]
+            });
             generateHighPressureField();
         }
 // === NEW: Function to dynamically update the properties of each high-pressure cell ===
