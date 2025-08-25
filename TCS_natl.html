@@ -364,6 +364,19 @@
                 ]],
                 elevation: 185
             },
+            central_american_highlands: {
+                type: "Polygon",
+                coordinates: [[
+                    [-92, 16],   // 西北角 (危地马拉)
+                    [-88, 14],   // 中部
+                    [-84, 10],   // 东南角 (哥斯达黎加)
+                    [-83, 10.5], // 东南角 (东侧)
+                    [-87, 14.5], // 中部 (东侧)
+                    [-91, 16.5], // 西北角 (东侧)
+                    [-92, 16]    // 回到起点闭合多边形
+                ]],
+                elevation: 130
+            }
         };
 
         const cyclone = {
@@ -376,18 +389,18 @@
 
         const categories = [
             { min: 0, name: "低压区 (LO)", color: '#FFFFFF' }, { min: 12.0, name: "热带低压 (TD)", color: '#96CEFF' }, { min: 17.2, name: "热带风暴 (TS)", color: '#00FFFF' },
-            { min: 24.5, name: "强热带风暴 (STS)", color: '#00FF00' }, { min: 32.7, name: "台风 (TY)", color: '#FFFF00' },
-            { min: 41.5, name: "强台风 (STY)", color: '#FFA500' }, { min: 51.0, name: "超强台风 (SuperTY)", color: '#FF0000' },
+            { min: 32.9, name: "一级飓风 (CAT1)", color: '#FFFB90' }, { min: 42.7, name: "二级飓风 (CAT2)", color: '#FFB933' },
+            { min: 49.4, name: "三级飓风 (CAT3)", color: '#FF6600' }, { min: 58.1, name: "四级飓风 (CAT4)", color: '#EB3700' }, { min: 70.5, name: "五级飓风 (CAT5)", color: '#8F0000' }
         ];
         const BST_DOT_COLORS = [
             { min: 0,   name: "低压区 (LO)", color: '#FFFFFF' },
-            { min: 24,  name: "热带低压 (TD)", color: '#96CEFF' }, // 在这里添加逗号
-            { min: 34,  name: "热带风暴 (TS)", color: '#00FFFC' },
-            { min: 64,  name: "一级台风 (CAT1)", color: '#FFFB90' },
-            { min: 83,  name: "二级台风 (CAT2)", color: '#FFB933' },
-            { min: 96,  name: "三级台风 (CAT3)", color: '#FF6600' },
-            { min: 113, name: "四级台风 (CAT4)", color: '#EB3700' },
-            { min: 137, name: "五级台风 (CAT5)", color: '#8F0000' }
+            { min: 22.6,  name: "热带低压 (TD)", color: '#96CEFF' }, // 在这里添加逗号
+            { min: 32.6,  name: "热带风暴 (TS)", color: '#00FFFC' },
+            { min: 62.5,  name: "一级台风 (CAT1)", color: '#FFFB90' },
+            { min: 82.5,  name: "二级台风 (CAT2)", color: '#FFB933' },
+            { min: 97.5,  name: "三级台风 (CAT3)", color: '#FF6600' },
+            { min: 112.5, name: "四级台风 (CAT4)", color: '#EB3700' },
+            { min: 137.5, name: "五级台风 (CAT5)", color: '#8F0000' }
         ];
         
         function initializeColorScale() {
@@ -504,13 +517,13 @@
             for (let y = 0; y < height; y++) {
                 const row = [];
                 const peakY = height * 0.8;
-                const sigma = height * 0.5;
+                const sigma = height * 0.6;
                 const baseTemp = minTemp + (maxTemp - minTemp) * Math.exp(-Math.pow(y - peakY, 2) / (2 * sigma * sigma));
                 for (let x = 0; x < width; x++) {
                     if (landMask && landMask(x, y)) {
                         row.push(null); continue;
                     }
-                    const noise1 = Math.sin(x / 45) * Math.cos(y / 80) * 1.1;
+                    const noise1 = Math.sin(x / 55) * Math.cos(y / 80) * 1.1;
                     const noise2 = Math.sin(x / 38) * Math.cos(y / 52) * 0.4;
                     const noise3 = Math.sin(x / 23) * Math.cos(y / 27) * 0.4;
                     const coolPatchCenterX1 = width * 0.18;
@@ -518,9 +531,9 @@
                     const coolPatchStrength1 = 2.0;
                     const dx1 = x - coolPatchCenterX1;
                     const noise4 = coolPatchStrength1 * Math.exp(-(dx1 * dx1) / (2 * coolPatchSigma1 * coolPatchSigma1));
-                    const coolPatchCenterX2 = width * 0.77;
+                    const coolPatchCenterX2 = width * 0.8;
                     const coolPatchSigma2 = width * 0.2;
-                    const coolPatchStrength2 = -6.0;
+                    const coolPatchStrength2 = -4.5;
                     const dx2 = x - coolPatchCenterX2;
                     const noise5 = coolPatchStrength2 * Math.exp(-(dx2 * dx2) / (2 * coolPatchSigma2 * coolPatchSigma2));
                     const noise = noise1 + noise2 + noise3 + noise4 + noise5;
@@ -697,7 +710,7 @@
                 }
                 
                 highPressureCells.push({
-                    x: (width / (numCells + 1)) * (1.12*i + 0.88) + (Math.random() - 0.5) * 100,
+                    x: (width / (numCells + 1)) * (1.22*i + 0.78) + (Math.random() - 0.5) * 100,
                     y: cell_y,
                     baseSigmaX: baseSigmaX,
                     sigmaX: baseSigmaX,
@@ -741,7 +754,7 @@
                 });
             }
             // Add a powerful low-pressure cell at the northern edge
-            const lowPressureY = height * (0.7 - highLatitudeValue);
+            const lowPressureY = height * (0.65 - highLatitudeValue);
             if (lowPressureY > 0) {
                 highPressureCells.push({
                     x: width / 1.6, // Centered horizontally
@@ -1198,11 +1211,11 @@ function drawEnsemblePath() {
                                                                                    
                                                                                    if (landMask && landMask(cx_logic, cy_logic)) {
                                                                                        const elevation = getElevationAt(cx_logic, cy_logic);
-                                                                                       const baseFrictionFactor = 0.02;
-                                                                                       const terrainDisruptionMultiplier = 6.0;
+                                                                                       const baseFrictionFactor = 0.015;
+                                                                                       const terrainDisruptionMultiplier = 3.0;
                                                                                        const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
                                                                                        const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
-                                                                                       cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
+                                                                                       cyclone.windSpeed -= (cyclone.windSpeed - 8) * ((cyclone.windSpeed / 30)**0.5) * totalWeakeningFactor;
                                                                                        cyclone.extratropicalTransition = Math.max(0, cyclone.extratropicalTransition - 0.2);
                                                                                    } else {
                                                                                        if (cy_logic >= 0 && cy_logic < height && cx_logic >= 0 && cx_logic < width && sstData[cy_logic]?.[cx_logic] !== null) {
@@ -1225,8 +1238,8 @@ function drawEnsemblePath() {
                                                                                            moistenEnvironment(cx_logic, cy_logic);
 
                                                                                            if (currentSST < 25.5 && environmentPressure < 1014) {
-                                                                                               cyclone.extratropicalTransition += (25.5 - currentSST) * 2.0;
-                                                                                               cyclone.windSpeed += 0.5
+                                                                                               cyclone.extratropicalTransition += (25.5 - currentSST) * 0.5 + (1014 - environmentPressure) * 0.25;
+                                                                                               cyclone.windSpeed += 0.1
                                                                                            } else {
                                                                                                cyclone.extratropicalTransition -= 0.2;
                                                                                            }
