@@ -126,12 +126,12 @@
             </div>
         </div>
         <div id="high-pressure-control" class="flex-1">
-            <label for="high-pressure-slider" class="block mb-2 font-bold">副热带高压脊线纬度</label>
+            <label for="high-pressure-slider" class="block mb-2 font-bold">副热带高压纬度</label>
             <input id="high-pressure-slider" type="range" min="0" max="100" value="60" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             <div class="flex justify-between text-xs w-full mt-1 px-1">
-                <span>10N</span>
-                <span>30N</span>
-                <span>50N</span>
+                <span>南</span>
+                <span>中</span>
+                <span>北</span>
             </div>
         </div>
     </div>
@@ -297,6 +297,7 @@
         // Game state variables
         let width, height;
         let sstData;
+        let initialSstData;
         let landPath;
         let animationFrameId;
         let isGameOver = false;
@@ -515,6 +516,7 @@
                 }
                 sstData.push(row);
             }
+            initialSstData = JSON.parse(JSON.stringify(sstData));
         }
 
         // === 替换 initializeDryAir：现在它只在模拟开始时生成一次随机干区 ===
@@ -674,13 +676,11 @@
                 const baseSigmaX = width * (0.2 + Math.random() * 0.1);
 
                 // 为第一个高压单体（i === 0）设置特殊的强度逻辑
-                let strength = 18 + Math.random() * 10;
+                let baseStrength = 18 + Math.random() * 10;
                 if (i === 0) {
-                    // 当 numCells > 1 时，第一个高压单体的强度可以为0
-                    // 随机决定是否生成一个强度为0的弱高压，或者一个正常的高压
-                    const isWeak = Math.random() < 0.75; // 75%的概率生成弱高压
+                    const isWeak = Math.random() < 0.75;
                     if (numCells > 1 && isWeak) {
-                        strength = Math.random() * 10; // 将下限设为0，上限可调
+                        baseStrength = Math.random() * 10;
                     }
                 }
                 
@@ -690,12 +690,15 @@
                     baseSigmaX: baseSigmaX,
                     sigmaX: baseSigmaX,
                     sigmaY: height * (0.1 + Math.random() * 0.3),
-                    strength: strength,
-                    velocityX: (Math.random() - 0.5) * 1.5,
+                    strength: baseStrength,
+                    baseStrength: baseStrength,
+                    velocityX: (Math.random() - 0.5) * 2.5,
                     oscillationPhase: Math.random() * Math.PI * 2,
-                    oscillationSpeed: 0.08 + Math.random() * 0.015,
-                    oscillationAmount: 0.15 + Math.random() * 0.2,
-                    
+                    oscillationSpeed: 0.08 + Math.random() * 0.045,
+                    oscillationAmount: 0.15 + Math.random() * 0.5,
+                    strengthOscillationPhase: Math.random() * Math.PI * 2,
+                    strengthOscillationSpeed: 0.005 + Math.random() * 0.008, // 强度变化可以慢一些
+                    strengthOscillationAmount: 1 + Math.random() * 10,     // 强度变化幅度 (例如 +/- 4到8hPa)
                     noiseLayers: [
                         {
                             freqX: 300 + Math.random() * 100,
@@ -719,11 +722,11 @@
                             amplitude: 1.5 + Math.random() * 1
                         },
                         {
-                            freqX: 6 + Math.random() * 6,
-                            freqY: 6 + Math.random() * 6,
+                            freqX: 8 + Math.random() * 5,
+                            freqY: 8 + Math.random() * 5,
                             offsetX: Math.random() * 1000,
                             offsetY: Math.random() * 1000,
-                            amplitude: 0.2 + Math.random() * 0.4
+                            amplitude: 0 + Math.random() * 0.3
                         }
                     ]
                 });
@@ -887,7 +890,29 @@
             ctx.putImageData(imageData, 0, 0);
             drawLand();
         }
+// === 新增：海温随时间缓慢恢复的函数 ===
+        function recoverSST() {
+            if (!sstData || !initialSstData) return;
 
+            // 恢复系数，值越小，恢复得越慢。0.001表示每步恢复0.1%的温差。
+            const recoveryFactor = 0.02;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    // 只处理海水区域
+                    if (sstData[y][x] !== null) {
+                        const currentTemp = sstData[y][x];
+                        const originalTemp = initialSstData[y][x];
+
+                        // 如果当前水温低于原始水温，则进行恢复
+                        if (currentTemp < originalTemp) {
+                            const difference = originalTemp - currentTemp;
+                            sstData[y][x] += difference * recoveryFactor;
+                        }
+                    }
+                }
+            }
+        }
         function updateSSTAndDraw(cx, cy, radius) {
             for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y++) {
                 for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x++) {
@@ -1170,8 +1195,8 @@ function drawEnsemblePath() {
                                                                                            const gradX = p_x_plus - p_x_minus;
                                                                                            const gradY = p_y_plus - p_y_minus;
                                                                                            const gradMagnitude = Math.sqrt(gradX**2 + gradY**2);
-                                                                                           const betaDriftX = -0.35;
-                                                                                           const betaDriftY = -0.25;
+                                                                                           const betaDriftX = Math.random() * 0.2 - 0.45;
+                                                                                           const betaDriftY = Math.random() * 0.1 - 0.30;
                                                                                            if (gradMagnitude > 0.001) {
                                                                                                const normalizedDirX = gradY / gradMagnitude;
                                                                                                const normalizedDirY = -gradX / gradMagnitude;
@@ -1229,6 +1254,7 @@ function drawEnsemblePath() {
                                                                                        generateDryAirField();
                                                                                        updateDryAirBlobs();
                                                                                        updateVwsLayer();
+                                                                                       recoverSST();
                                                                                        updateBestTrackReport();
                                                                                        gameTime.setHours(gameTime.getHours() + 6);
                                                                                        const distKm = Math.sqrt((cyclone.x - cyclone.lastReportX)**2 + (cyclone.y - cyclone.lastReportY)**2) * kmPerPixel;
