@@ -728,7 +728,7 @@
                 });
             }
             // Add a powerful low-pressure cell at the northern edge
-            const lowPressureY = height * (0.7 - highLatitudeValue);
+            const lowPressureY = height * (0.6 - highLatitudeValue * 0.9);
             if (lowPressureY > 0) {
                 highPressureCells.push({
                     x: width / 1.6, // Centered horizontally
