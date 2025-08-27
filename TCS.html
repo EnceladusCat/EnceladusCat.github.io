@@ -1233,7 +1233,7 @@ function drawEnsemblePath() {
                                                                                    if (landMask && landMask(cx_logic, cy_logic)) {
                                                                                        const elevation = getElevationAt(cx_logic, cy_logic);
                                                                                        const baseFrictionFactor = 0.005;
-                                                                                       const terrainDisruptionMultiplier = 5.0;
+                                                                                       const terrainDisruptionMultiplier = 8.0;
                                                                                        const terrainFactor = (elevation / 255) * terrainDisruptionMultiplier;
                                                                                        const totalWeakeningFactor = baseFrictionFactor * (1 + terrainFactor);
                                                                                        cyclone.windSpeed -= (cyclone.windSpeed - 5) * totalWeakeningFactor;
