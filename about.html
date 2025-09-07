@@ -90,8 +90,47 @@
         .tc-card:hover { transform: translateY(-5px); box-shadow: 0 6px 20px var(--card-shadow); }
         .tc-card img { max-width: 100%; height: auto; border-radius: 4px; background-color: #000; }
         .tc-card p { margin-top: 0.75rem; font-weight: bold; color: var(--primary-color); margin-bottom: 0; }
-        .tc-card .placeholder { width: 100%; aspect-ratio: 1/1; background-color: var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: var(--text-muted); border-radius: 4px; }
+        .tc-card .placeholder { width: 100%; aspect-ratio: 1/1; background-color: var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: var(--text-muted); border-radius: 4px; } 
 
+        /* --- Modern Action Buttons Style --- */
+        .tool-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .tool-actions .action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem; /* 图标和文字的间距 */
+            padding: 0.3rem 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: var(--text-muted);
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 20px; /* 胶囊形状 */
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+
+        .tool-actions .action-link:hover {
+            background-color: var(--primary-color);
+            color: #fff; /* 悬浮时文字变白 */
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .tool-actions .action-link svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor; /* 图标颜色继承文字颜色 */
+            stroke-width: 2;
+        }
 
         @media (max-width: 768px) { .toolbox-layout { flex-direction: column; } }
     </style>
@@ -130,10 +169,9 @@
                     <li><a class="active" data-tool="planetary-calculator">行星参数计算器</a></li>
                     <li><a data-tool="radar-wind-calculator">雷达测风估算</a></li>
                     <li><a data-tool="ascat-corrector">ASCAT风扫修正</a></li>
-                    <li><a data-tool="fnv3-ensemble">FNV3 TC Ensemble</a></li>
-                    <li><a data-tool="enm-diagnosis">ENM TC Diagnosis</a></li>
+                    <li><a data-tool="fnv3-ensemble">FNV3系集绘画</a></li>
+                    <li><a data-tool="enm-diagnosis">ENM AIIR热带气旋定强机</a></li>
                     <li><a data-tool="tc-real-time">TC Real-time</a></li>
-                    <li><a href="./TCW.html">TC Track Auto Writer</a></li>
                 </ul>
             </aside>
             <section class="tool-content">
@@ -252,7 +290,21 @@
                 </div>
 
                 <div id="enm-diagnosis" class="tool-card" style="display: none;">
-                    <h2 class="tool-title">ENM TC Diagnosis v0.114514</h2>
+                    <h2 class="tool-title">ENM AIIR v0.2</h2>
+                    <div class="tool-actions">
+                        <a href="https://www.tyboard.net/forum.php?mod=viewthread&tid=2350&extra=page%3D1" class="action-link" target="_blank" rel="noopener noreferrer">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span>相关信息</span>
+                        </a>
+                        <a id="error-info-btn" class="action-link">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            <span>误差情况</span>
+                        </a>
+                        <a href="./archive.html" class="action-link">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                            <span>定强存档</span>
+                        </a>
+                    </div>
                     <div class="form-group">
                         <label for="image-upload">上传热带气旋图像 (可多选)</label>
                         <input type="file" id="image-upload" multiple accept="image/jpeg, image/png">
@@ -748,11 +800,11 @@
                 const helpContent = `
                                         <button id="enm-help-close" class="modal-close">&times;</button>
                                         <h3>工具简介</h3>
-                                        <p>传统的热带气旋强度分析（如德沃夏克分析法）依赖人工判读，存在一定的主观性和滞后性。<strong>ENM (Enceladus Method) TC Diagnosis</strong> 工具采用深度学习模型，旨在通过计算机视觉技术，对卫星云图进行量化、一致的特征分析，从而提供一个客观、自动化的强度评估参考。</p>
+                                        <p><strong>ENM (Enceladus Method) TC Diagnosis</strong> 工具采用深度学习模型，旨在通过计算机视觉技术，对卫星云图进行量化、一致的特征分析，从而提供一个客观、自动化的强度评估参考。</p>
                                         <p>与传统方法相比，AI模型能更稳定地测量云顶温度、眼墙结构、螺旋云带等关键特征，并能学习和识别一些特殊形态（如季风低压、针眼气旋）的细微差异，以期获得更精确的评价。</p>
                                         <h3>使用说明</h3>
                                         <ol>
-                                            <li><strong>上传图像</strong>：点击上传按钮，选择一张或多张热带气旋的红外（IR）卫星云图。</li>
+                                            <li><strong>上传图像</strong>：点击上传按钮，选择一张或多张热带气旋的<strong>红外（IR-BW）</strong>卫星云图，不要带边框/海岸线等干扰因子，大皮鸭的IR-BW建议截到840*840。</li>
                                             <li><strong>开始分析</strong>：点击“开始分析”按钮，网页端的AI模型将对每一张图片进行推理。</li>
                                             <li><strong>查看结果</strong>：模型根据云图特征计算出的平均猜测（Average Guess）风速值（单位：KT）。</li>
                                         </ol>
@@ -760,7 +812,7 @@
                                         <ul>
                                             <li><strong>实验性项目</strong>：本玩具为实验性项目，其结果仅供交流学习，不代表任何个体和机构的观点。</li>
                                             <li><strong>数据源敏感性</strong>：模型主要使用Digital Typhoon的卫星图像进行训练，理论上其他源的云图也可以，但可能会引入未知误差。</li>
-                                            <li><strong>单帧局限性</strong>：对单帧云图的分析可能存在波动，有时可以超过15%。</li>
+                                            <li><strong>单帧局限性</strong>：对单帧云图的分析可能存在波动，有时可以超过15%，建议取3h平均。</li>
                                             <li><strong>环境干扰</strong>：当热带气旋环流较小，令图像中存在其他天气系统（如其他气旋、季风槽等）干扰时，结果可能失真，有时需要缩放处理。</li>
                                         </ul>
                 `;
@@ -782,6 +834,22 @@
                 enmHelpBtn.addEventListener('click', openModal);
                 if (enmHelpCloseBtn) enmHelpCloseBtn.addEventListener('click', closeModal);
                 enmHelpOverlay.addEventListener('click', closeModal);
+
+                const errorInfoBtn = document.getElementById('error-info-btn');
+                if (errorInfoBtn) {
+                    errorInfoBtn.addEventListener('click', () => {
+                        alert(
+        `ENM模型误差情况说明：
+
+        1.  均方根误差 (RMSE): 约 8.7 KT。
+        2.  90%误差范围：13KT；70%误差范围：9KT；50%误差范围：5KT。
+        3.  主要误差来源:长得很像风眼的对流空洞、干菜、长得很像CDO的CCC、长得很像对流空洞的风眼、小到看不清的风眼、被切离
+        4.  建议:
+            * 为获得更稳定的结果，建议对连续3-6小时的分析结果取平均值。
+            * 本模型结果仅为客观参考，不应替代官方预报机构的发布。`
+                        );
+                    });
+                }
             }
 
             // --- TC Real-time Logic ---
