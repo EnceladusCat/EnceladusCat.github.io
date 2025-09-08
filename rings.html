@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行星环贴图生成器 | Planetary Ring Texture Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .canvas-container {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl bg-gray-800/50 rounded-2xl shadow-2xl p-6 sm:p-8 text-center backdrop-blur-sm border border-gray-700">
+        <h1 class="text-2xl sm:text-3xl font-bold text-white tracking-tight">行星环贴图生成器</h1>
+        <p class="text-gray-400 mt-2 mb-6">点击按钮即可程序化生成一个 512x32 像素的行星环纹理。</p>
+
+        <div class="canvas-container w-full h-16 bg-gray-900/50 rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center mb-6">
+            <canvas id="ringCanvas" width="512" height="32" class="w-full h-auto"></canvas>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <button id="generateBtn" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-gray-900">
+                生成新的贴图
+            </button>
+            <a id="downloadLink" class="w-full sm:w-auto bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hidden cursor-pointer">
+                下载 PNG
+            </a>
+        </div>
+        <p id="infoText" class="text-gray-500 text-sm mt-4 h-5"></p>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const WIDTH = 512;
+        const HEIGHT = 32;
+
+        const canvas = document.getElementById('ringCanvas');
+        const ctx = canvas.getContext('2d');
+        const generateBtn = document.getElementById('generateBtn');
+        const downloadLink = document.getElementById('downloadLink');
+        const infoText = document.getElementById('infoText');
+
+        /**
+         * Converts an HSV color value to RGB.
+         * @param {number} h The hue value (0-1).
+         * @param {number} s The saturation value (0-1).
+         * @param {number} v The value value (0-1).
+         * @returns {Array<number>} The RGB representation [r, g, b] from 0-255.
+         */
+        function hsvToRgb(h, s, v) {
+            let r, g, b;
+            const i = Math.floor(h * 6);
+            const f = h * 6 - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function generateRingTexture() {
+            infoText.textContent = "正在生成...";
+            generateBtn.disabled = true;
+            generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            setTimeout(() => {
+                const imageData = ctx.createImageData(WIDTH, HEIGHT);
+                const data = imageData.data;
+
+                const hue = Math.random();
+                const saturation = Math.random() * 0.3;
+                const globalMaxAlpha = Math.floor(Math.random() * (220 - 150 + 1)) + 150;
+                infoText.textContent = `色调: ${hue.toFixed(2)}, 饱和度: ${saturation.toFixed(2)}, 全局最大不透明度: ${globalMaxAlpha}`;
+
+                // 3. 随机混合绘制密集条纹、渐变尘埃环和空隙
+                // 3. Randomly mix drawing dense stripes, gradient dust bands, and gaps.
+                let x = 0;
+                while (x < WIDTH) {
+                    const actionRoll = Math.random();
+
+                    if (actionRoll > 0.35) { // 65% 的概率绘制密集的“条形码”条纹
+                        const stripeWidth = Math.floor(Math.random() * 10) + 1;
+                        const value = Math.random() * 0.5 + 0.5;
+                        const alpha = Math.floor(Math.random() * (globalMaxAlpha - 40 + 1)) + 0;
+                        const [r, g, b] = hsvToRgb(hue, saturation, value);
+                        
+                        const endX = Math.min(x + stripeWidth, WIDTH);
+                        for (let ix = x; ix < endX; ix++) {
+                            for (let iy = 0; iy < HEIGHT; iy++) {
+                                const i = (iy * WIDTH + ix) * 4;
+                                data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = alpha;
+                            }
+                        }
+                        x += stripeWidth;
+
+                    } else if (actionRoll > 0.20) { // 15% 的概率绘制渐变的“尘埃”环
+                        const bandWidth = Math.floor(Math.random() * 60) + 30;
+                        const peakValue = Math.random() * 0.4 + 0.6;
+                        const peakAlpha = Math.floor(Math.random() * (globalMaxAlpha * 0.7)) + (globalMaxAlpha * 0.1);
+                        const [r, g, b] = hsvToRgb(hue, saturation, peakValue);
+
+                        const endX = Math.min(x + bandWidth, WIDTH);
+                        const midX = x + bandWidth / 2;
+
+                        for (let ix = x; ix < endX; ix++) {
+                            const distance = Math.abs(ix - midX);
+                            const falloff = Math.pow(1 - (distance / (bandWidth / 2)), 1.5);
+                            const currentAlpha = Math.floor(peakAlpha * falloff);
+
+                            for (let iy = 0; iy < HEIGHT; iy++) {
+                                const i = (iy * WIDTH + ix) * 4;
+                                data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = currentAlpha;
+                            }
+                        }
+                        x += bandWidth;
+
+                    } else { // 20% 的概率留出空隙
+                        const gapWidth = Math.floor(Math.random() * 80) + 1;
+                        x += gapWidth;
+                    }
+                }
+
+                // 4. 添加全局噪点增加细节
+                // 4. Add global noise for more detail.
+                const noiseStrength = 5;
+                for (let i = 0; i < data.length; i += 4) {
+                    const noise = Math.floor(Math.random() * (2 * noiseStrength + 1)) - noiseStrength;
+                    data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+                    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+
+                const dataUrl = canvas.toDataURL('image/png');
+                downloadLink.href = dataUrl;
+                downloadLink.download = `planetary_ring_${Date.now()}.png`;
+                downloadLink.classList.remove('hidden');
+
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }, 50);
+        }
+
+        generateBtn.addEventListener('click', generateRingTexture);
+        window.addEventListener('load', generateRingTexture);
+    </script>
+</body>
+</html>
+
