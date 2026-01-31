@@ -15,6 +15,13 @@
             linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
             background-size: 30px 30px;
         }
+        @keyframes scan-glint {
+                    0% { background-position: -200% 0; }
+                    100% { background-position: 200% 0; }
+                }
+        .btn-glint:hover .glint-layer {
+                    animation: scan-glint 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+                }
         .glass-panel {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(12px);
@@ -52,13 +59,13 @@
                 
                 <div class="prose prose-invert prose-sm text-slate-300 leading-relaxed">
                     <p>
-                        In the aftermath of the <span class="text-cyan-300 font-bold">Great Solar Flare of 1996</span>, Satellites burned. The global weather grid went dark. For three years, humanity was blind to the skies. To fill the void, the <strong class="text-white">STORM_INC</strong> supplied reconstruction aid to 142 nations, and secured exclusive rights to all global meteorological data streams. Today, every hurricane warning center runs by STORM_Inc. But observation is no longer enough. You are accessing the <strong class="text-cyan-400 font-mono">TCM (Tropical Cyclone Monitor)</strong> interface. A predictive engine designed to test the <span class="bg-slate-800 text-white px-1 font-mono">Active Modification Protocols</span>.
+                        In the aftermath of the <span class="text-cyan-300 font-bold">Great Solar Flare of 1996</span>, Satellites burned. The global weather grid went dark. For three years, humanity was blind to the skies.
                     </p>
                     <p>
-                        Originally conceptualized in the blocky, low-res terminals of <em>Roblox & Minecraft servers (circa 2016)</em> by the legendary architect <strong>ProtoManly</strong>, this system has been rebuilt from the ground up using modern web technologies.
+                        To fill the void, the <strong class="text-white">STORM_INC</strong> supplied reconstruction aid to 142 nations, and secured exclusive rights to all global meteorological data streams. Today, every hurricane warning center runs by STORM_Inc.
                     </p>
                     <p>
-                        Today, STORM_INC stands as the premier tool for simulated meteorology, offering unprecedented fidelity in steering currents, thermodynamics, and radar reconstruction.
+                    But observation is no longer enough. You are accessing the <strong class="text-cyan-400 font-mono">TCM (Tropical Cyclone Monitor)</strong> interface. A predictive engine designed to test the <span class="bg-slate-800 text-white px-1 font-mono">Active Modification Protocols</span>.
                     </p>
                 </div>
 
@@ -95,11 +102,18 @@
 
             <div class="col-span-1 bg-slate-900/30 p-8 flex flex-col justify-between">
                 <div>
+                    <a href="/Storm_Inc/TCM.html" class="btn-glint group relative block w-full text-center bg-cyan-600 hover:bg-cyan-500 text-white font-black py-4 rounded-lg shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)] transition-all duration-300 mb-10 border border-cyan-400 overflow-hidden">
+                                            <div class="glint-layer absolute inset-0 bg-[linear-gradient(45deg,transparent_40%,rgba(255,255,255,0.3)_50%,transparent_60%)] bg-[length:200%_100%] bg-no-repeat bg-[position:-200%_0]"></div>
+                                            
+                                            <span class="relative z-10 flex items-center justify-center gap-3 uppercase tracking-widest text-sm md:text-base">
+                                                <i class="fa-solid fa-power-off group-hover:animate-pulse"></i> Access TCM Interface
+                                            </span>
+                                        </a>
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6 mono">CREDITS</h2>
                     
                     <div class="space-y-6">
                         <div>
-                            <div class="text-xs text-slate-400 mb-1">Lead Developer</div>
+                            <div class="text-xs text-slate-400 mb-1">Author</div>
                             <div class="flex items-center gap-3">
                                 <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs">EC</div>
                                 <div>
