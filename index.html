@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About STORM_INC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .grid-bg {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="grid-bg min-h-screen flex items-center justify-center p-6">
+
+    <div class="max-w-4xl w-full glass-panel rounded-2xl overflow-hidden shadow-2xl">
+        
+        <div class="bg-slate-900/80 p-8 border-b border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <div class="text-cyan-400 font-bold tracking-widest text-xs mb-1 mono">VERSION 2.0 // BUILD 2026.01</div>
+                <h1 class="text-4xl md:text-5xl font-black text-white tracking-tighter italic">
+                    STORM_INC
+                </h1>
+                <p class="text-slate-400 mt-2 text-sm md:text-base">Advanced Tropical Cyclone Simulation Environment</p>
+            </div>
+            <div class="text-right hidden md:block">
+                <div class="text-xs text-slate-500 font-mono">SYSTEM STATUS</div>
+                <div class="text-green-400 font-bold flex items-center justify-end gap-2">
+                    <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> OPERATIONAL
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3">
+            
+            <div class="col-span-2 p-8 border-r border-slate-700/50">
+                <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-cyan-500"></i> PROJECT ORIGINS
+                </h2>
+                
+                <div class="prose prose-invert prose-sm text-slate-300 leading-relaxed">
+                    <p>
+                        In the aftermath of the <span class="text-cyan-300 font-bold">Great Data Silence of 2024</span>, global weather forecasting models collapsed due to satellite array failures. To fill the void, the <strong class="text-white">STORM_INC initiative</strong> was launched—a distributed, browser-based simulation network designed to reconstruct historical cyclone behaviors and predict future anomalies.
+                    </p>
+                    <p>
+                        Originally conceptualized in the blocky, low-res terminals of <em>Roblox & Minecraft servers (circa 2016)</em> by the legendary architect <strong>ProtoManly</strong>, this system has been rebuilt from the ground up using modern web technologies.
+                    </p>
+                    <p>
+                        Today, STORM_INC stands as the premier tool for simulated meteorology, offering unprecedented fidelity in steering currents, thermodynamics, and radar reconstruction.
+                    </p>
+                </div>
+
+                <div class="mt-8">
+                    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 mono">CORE MODULES</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-wind text-blue-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Wind Radii (R34/50/64)</span>
+                        </div>
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-arrow-turn-up text-purple-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Steering Current Analysis</span>
+                        </div>
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-droplet text-cyan-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Mid-Level Humidity</span>
+                        </div>
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-chart-line text-green-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Forecast Track & Warnings</span>
+                        </div>
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-satellite-dish text-red-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Doppler Radar (Reflectivity)</span>
+                        </div>
+                        <div class="bg-slate-800/50 p-3 rounded border border-slate-700 flex items-center gap-3">
+                            <i class="fa-solid fa-temperature-arrow-up text-orange-400"></i>
+                            <span class="text-xs font-mono text-slate-300">Phase Space Diagrams</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-span-1 bg-slate-900/30 p-8 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6 mono">CREDITS</h2>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <div class="text-xs text-slate-400 mb-1">Lead Developer</div>
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs">EC</div>
+                                <div>
+                                    <div class="font-bold text-white">EnceladusCat</div>
+                                    <a href="#" class="text-xs text-cyan-500 hover:text-cyan-300 transition-colors flex items-center gap-1">
+                                        <i class="fa-brands fa-github"></i> @EnceladusCat
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-xs text-slate-400 mb-1">Original Inspiration</div>
+                            <div class="flex items-center gap-3 opacity-75">
+                                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-bold text-xs">PM</div>
+                                <div>
+                                    <div class="font-bold text-slate-200">ProtoManly</div>
+                                    <div class="text-[10px] text-slate-500">Minecraft/Roblox (2016)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-12 pt-6 border-t border-slate-800 text-center">
+                    <div class="text-2xl text-red-500 mb-2">
+                        <i class="fa-solid fa-heart fa-beat"></i>
+                    </div>
+                    <div class="text-xs text-slate-500 font-mono">
+                        Made with love & heavy JS<br>
+                        Last Updated: <span class="text-slate-300">Jan 2026</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-black/40 p-4 text-center border-t border-slate-800">
+            <p class="text-[10px] text-slate-600 font-mono uppercase">
+                STORM_INC IS A FICTIONAL SIMULATION TOOL. NOT FOR REAL-WORLD NAVIGATION OR SURVIVAL.
+            </p>
+        </div>
+    </div>
+
+</body>
+</html>
