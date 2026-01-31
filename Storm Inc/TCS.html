@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STROM_INC 热带气旋模拟器</title>
+    <meta name="keywords" content="Hurricane Simulator, Typhoon Simulator, Tropical Cyclone Simulator, Storm Tracking, Weather Simulation, STROM_INC, 台风模拟器, 气旋模拟, 飓风模拟, 气象游戏">
+    <meta name="description" content="Experience realistic storm formation with STROM_INC. An advanced online Hurricane Simulator and Typhoon tracker. Create, track, and analyze tropical cyclones. ">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
+    <script src="https://mrdoob.github.io/stats.js/build/stats.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- 引入科技感字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="favicon/favicon-96x96.png">
+    <link rel="manifest" href="favicon/site.webmanifest">
+    <link rel="mask-icon" href="favicon/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+    <!-- [恢复] 用户指定的导航脚本 -->
+    <script src="nav.js" defer></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#1f2937', 900: '#0f172a', 950: '#020617' }, // 保留以兼容 JS 逻辑
+                        cyan: { 450: '#22d3ee' }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    animation: {
+                        'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    cursor: {
+                        'grab': 'grab',
+                        'grabbing': 'grabbing',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .roblox-bg {
+            background: repeating-linear-gradient(
+                45deg,
+                #0f172a,
+                #0f172a 30px,
+                #0f172a 30px,
+                #38bdf8 60px
+            );
+            animation: scrollBg 1s linear infinite;
+        }
+
+        @keyframes scrollBg {
+            0% { background-position: 0 0; }
+            100% { background-position: 85px 0; }
+        }
+
+        /* 2. 标题 3D 效果：堆叠阴影法 (Stacked Shadows) */
+        /* 这种方法比 transform: perspective 更清晰，更像 UI */
+        .roblox-title {
+            color: white;
+            /* 描边 */
+            -webkit-text-stroke: 0.0px #0f172a;
+            /* 3D 厚度 + 投影 */
+            text-shadow:
+                4px 4px 0px #0284c7, /* 蓝色厚度层 */
+                8px 8px 0px rgba(0,0,0,0.25); /* 软阴影 */
+        }
+
+        /* 3. 容器的"物理"厚度 */
+        .roblox-box-shadow {
+            /* 让进度条看起来像是在浮在空中，有厚度 */
+            box-shadow: 6px 6px 0px rgba(15, 23, 42, 0.4);
+        }
+
+        /* 4. 文字描边辅助类 */
+        .stroke-text {
+            -webkit-text-stroke: 0px #0f172a;
+        }
+
+        /* 弹跳动画 */
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            60% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        #loading-screen h1 {
+            animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        body {
+            background-color: #000000;
+            overflow: hidden; /* 防止全屏地图滚动 */
+            user-select: none; /* 防止拖拽时选中文字 */
+        }
+        /* 确保弹窗主体允许内容溢出（这样猫咪才能突出来） */
+        #catModal .relative.w-full {
+            overflow: visible !important;
+        }
+
+        /* 调整猫咪图片的视觉重心 */
+        #catModal img {
+            /* 这里的 translateY(40px) 是为了让猫咪的身体刚好压在边框上 */
+            transform: translateY(-20px);
+            image-rendering: -webkit-optimize-contrast; /* 保持图片清晰 */
+        }
+
+        /* 响应式调整：如果是小屏幕，缩小图片 */
+        @media (max-width: 640px) {
+            #catModal .w-64 {
+                width: 12rem; /* 小屏下缩小图片 */
+            }
+            #catModal .relative.w-full {
+                padding-top: 2rem;
+            }
+        }
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 自定义滑块样式 */
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px;
+            background: #22d3ee; margin-top: -5px; cursor: pointer;
+            border: 2px solid #000;
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
+            transform: rotate(45deg); /* 菱形滑块 */
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 2px; background: #334155;
+        }
+
+        /* 扫描线效果 */
+        .scanline {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+        }
+        @keyframes ring-breath {
+            0% {
+                outline: 2px solid rgba(255, 200, 200, 0.4);
+                outline-offset: 2px;
+            }
+            50% {
+                outline: 4px solid rgba(255, 100, 100, 0.9);
+                outline-offset: 6px; /* 产生空心间隙感 */
+            }
+            100% {
+                outline: 2px solid rgba(255, 0, 0, 0.4);
+                outline-offset: 2px;
+            }
+        }
+        
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            animation: marquee 60s linear infinite;
+        }
+
+        /* 赋予极强气旋的实心圆环类 */
+        .extreme-intensity-glow {
+            animation: ring-breath 1.8s infinite ease-in-out;
+            stroke: #ffffff !important;
+            stroke-width: 2px !important;
+            /* 确保圆环不被父级容器剪裁 */
+            paint-order: stroke fill;
+        }
+        /* [修复] D3 Tooltip 样式 */
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 10px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            background: rgba(10, 15, 20, 0.9); /* 更深的背景，高对比度 */
+            color: #f1f5f9;
+            border: 1px solid rgba(34, 211, 238, 0.5);
+            border-left: 3px solid #22d3ee;
+            border-radius: 4px;
+            pointer-events: none; /* 关键：防止阻挡鼠标事件，解决闪烁问题 */
+            z-index: 99999; /* 确保层级最高 */
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 1);
+            line-height: 1.6;
+            opacity: 0; /* 默认隐藏 */
+            transition: opacity 0.15s ease;
+            white-space: nowrap;
+            backdrop-filter: blur(4px);
+        }
+
+        /* 拖拽时的样式 */
+        .draggable-active {
+            cursor: grabbing !important;
+            border-color: rgba(34, 211, 238, 0.8) !important;
+            box-shadow: 0 0 25px rgba(34, 211, 238, 0.15) !important;
+            z-index: 100 !important;
+        }
+        .titlepage {
+          margin-left: 20px; /* 增加左外边距，将元素向右推20px */
+        }
+        
+        #breaking-news-container {
+            transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1); /* 类似弹簧的滑入效果 */
+        }
+        
+        /* 确保 SVG 和 Canvas 都在左上角对齐 */
+        #map-container svg,
+        #map-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #radar-canvas-layer {
+            pointer-events: none !important;
+            image-rendering: pixelated;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+        /* 让 Canvas 穿透鼠标事件，这样你依然可以与底下的 SVG 交互（比如看 tooltip） */
+        #wind-canvas-layer {
+            pointer-events: none;
+            z-index: 10; /* 放在 SVG 上层 */
+        }
+
+        /* [修复] 陆地颜色 - 确保与海洋有足够对比 */
+        .land {
+            fill: #3a495e;     /* Slate-600: 明显的灰蓝色 */
+            stroke: #475569;   /* Slate-500: 边界线 */
+            stroke-width: 0.8px;
+            vector-effect: non-scaling-stroke; /* 防止缩放时线条变粗 */
+        }
+
+        /* 经纬网 */
+        .graticule {
+            fill: none;
+            stroke: #374151;   /* Slate-700 */
+            stroke-width: 0.5px;
+            opacity: 0.3;
+            stroke-dasharray: 2 2;
+        }
+
+        /* 预测锥 (Forecast Cone) - 全息质感 */
+        .forecast-cone {
+            fill: rgba(34, 211, 238, 0.1); /* 青色半透明填充 */
+            stroke: rgba(34, 211, 238, 0.3); /* 青色边框 */
+            stroke-width: 1px;
+            stroke-dasharray: 4 4;
+            pointer-events: none;
+        }
+
+        /* 预测路径线 */
+        .forecast-track {
+            fill: none;
+            stroke-width: 1.5px;
+            stroke-dasharray: 3 3;
+            opacity: 0.8;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+        }
+
+        /* 历史/实测路径线 */
+        .storm-track {
+            fill: none;
+            stroke-width: 2.5px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* 风圈 (Wind Radii) */
+        .wind-radii {
+            opacity: 0.3;
+            mix-blend-mode: screen;
+            pointer-events: none;
+        }
+
+        /* 等压线 (Isobars) */
+        .isobar {
+            fill: none;
+            stroke: #64748b; /* Slate-500 */
+            stroke-width: 0.8px;
+            opacity: 0.3;
+        }
+        .isobar-low {
+            fill: none;
+            stroke: #ef4444; /* Red-500 */
+            stroke-width: 1.2px;
+            opacity: 0.6;
+        }
+        .isohume-low {
+            fill: none;
+            stroke: #cd7e4a; /* Yellow-400 */
+            stroke-width: 0.6px;
+            opacity: 0.5;
+        }
+        .isohume {
+            fill: none;
+            stroke: #cdc84a; /* Yellow-400 */
+            stroke-width: 0.6px;
+            opacity: 0.5;
+        }
+        .isohume-med {
+            fill: none;
+            stroke: #4ade80; /* Green-400 */
+            stroke-width: 0.6px;
+            opacity: 0.5;
+        }
+        .isohume-high {
+            fill: rgba(34, 197, 94, 0.1); /* Green-500 low opacity fill */
+            stroke: #22c55e; /* Green-500 */
+            stroke-width: 1.0px;
+            opacity: 0.5;
+        }
+        /* 预测点标签 */
+        .forecast-point-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            fill: #e2e8f0;
+            text-shadow: 0 2px 4px rgba(0,0,0,1);
+            pointer-events: none;
+            font-weight: bold;
+        }
+
+        /* 站点标签 */
+        .site-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            fill: #ffffff;
+            font-weight: bold;
+            text-shadow: 0 0 4px #000;
+            pointer-events: none;
+            background: rgba(0,0,0,0.5); /* 增加文字背景提高可读性 */
+        }
+        
+    </style>
+</head>
+<body class="w-screen h-screen font-sans text-slate-200 selection:bg-cyan-500/30 relative">
+    
+    <div id="loading-screen" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center font-sans select-none overflow-hidden transition-opacity duration-500 bg-[#0f172a]">
+        
+        <div class="roblox-bg absolute inset-0 w-full h-full opacity-50"></div>
+
+        <div class="relative z-10 flex flex-col items-center w-full max-w-lg px-4">
+            
+            <h1 class="roblox-title text-6xl md:text-7xl font-black italic mb-8 transform -rotate-3 text-center">
+                STORM_INC
+            </h1>
+
+            <div class="w-full h-10 bg-white border-4 border-slate-900 rounded-full relative roblox-box-shadow overflow-hidden">
+                <div id="loading-bar" class="h-full bg-gradient-to-b from-[#86efac] to-[#22c55e] border-r-4 border-slate-900 w-0 relative transition-all duration-[1000ms] ease-out">
+                    <div class="absolute top-1 left-1 right-1 h-2 bg-white/40 rounded-full"></div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex flex-col items-center space-y-2">
+                <span class="text-white font-black text-xl tracking-wider drop-shadow-md stroke-text">LOADING...</span>
+                <div class="bg-slate-900/40 backdrop-blur-md px-6 py-2 rounded-2xl border-2 border-white/20">
+                    <p id="loading-hint" class="text-white font-bold text-sm md:text-base text-center shadow-black drop-shadow-sm">
+                        💡 Hint: Warm water fuels storms!
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 1. 背景层 (Z-Index: 0) -->
+    <div id="animated-sphere-bg" class="absolute inset-0 z-0 opacity-40 pointer-events-none mix-blend-screen"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000000_90%)] z-0 pointer-events-none"></div>
+
+    <!-- 2. 地图层 (核心显示区, Z-Index: 1) -->
+    <div id="map-container" class="relative inset-0 z-[1] w-full h-full overflow-hidden bg-[#111827]">
+        <canvas id="radar-canvas-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-20 hidden"></canvas>
+    </div>
+
+    <!-- [新功能] 悬浮组件层 (Z-Index: 50) - 可拖拽 -->
+    
+    <!-- 2.1 状态监视器 -->
+    <div id="map-info-box" class="hidden fixed top-24 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md border border-white/20 px-6 py-2 rounded-full text-xs font-mono text-white z-50 shadow-2xl flex items-center gap-6 cursor-grab hover:border-cyan-500/50 transition-colors select-none group">
+        <!-- 拖拽手柄提示 -->
+        <div class="absolute -top-4 left-1/2 -translate-x-1/2 text-[10px] text-cyan-500/50 opacity-0 group-hover:opacity-100 transition-opacity tracking-widest uppercase scale-75" data-t="drag">DRAG</div>
+        
+        <p id="map-info-time" class="font-bold text-cyan-400 tracking-wider pointer-events-none"></p>
+        <div class="h-3 w-px bg-white/20 pointer-events-none"></div>
+        <p id="map-info-intensity" class="text-yellow-400 font-bold pointer-events-none"></p>
+        <div class="h-3 w-px bg-white/20 pointer-events-none"></div>
+        <p id="map-info-movement" class="text-slate-300 pointer-events-none"></p>
+    </div>
+
+    <!-- 2.2 强度曲线图 -->
+    <div id="intensity-chart-section" class="hidden fixed bottom-12 right-6 w-96 bg-black/80 backdrop-blur-md border border-white/20 p-3 shadow-2xl z-50 cursor-grab hover:border-cyan-500/50 transition-colors select-none group rounded-lg">
+        <div class="absolute top-0 right-0 w-3 h-3 border-t border-r border-white/30 pointer-events-none"></div>
+        <div class="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-white/30 pointer-events-none"></div>
+        
+        <div class="flex justify-between items-center mb-3">
+            <div class="flex items-center gap-2 border-l-2 border-cyan-500 pl-2">
+                <h3 id="intensity-chart-title" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Intensity Profile</h3>
+                <i class="fa-solid fa-grip text-slate-600 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </div>
+            
+            <div class="flex bg-slate-900/80 p-0.5 rounded border border-slate-700">
+                <button id="tab-kt" class="px-2 py-0.5 text-[8px] font-bold rounded bg-cyan-600 text-white transition-all">KT</button>
+                <button id="tab-hpa" class="px-2 py-0.5 text-[8px] font-bold rounded text-slate-400 hover:text-white transition-all">HPA</button>
+            </div>
+        </div>
+        
+        <div id="intensity-chart-container" class="w-full h-40 bg-black/40 border border-white/5"></div>
+    </div>
+
+    <!-- 3. UI 交互层 (HUD, Z-Index: 40) -->
+    <div class="absolute inset-0 z-40 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+
+        <!-- 顶部栏 -->
+        <header class="flex justify-between items-start pointer-events-auto">
+            <div class="group relative left-24">
+                <h1 class="text-2xl md:text-4xl font-black tracking-tighter text-white drop-shadow-lg italic">
+                    STORM<span class="text-cyan-500">_</span>INC <span class="text-[10px] md:text-xs font-mono font-normal tracking-[0.3em] text-slate-500 not-italic align-middle ml-2 group-hover:text-cyan-400 transition-colors">DYNAMICS ENGINE</span>
+                </h1>
+                <div class="h-1 w-12 bg-cyan-500 mt-1 rounded-full group-hover:w-full transition-all duration-700 ease-out"></div>
+            </div>
+
+            <!-- 设置按钮与语言切换 -->
+            <div class="flex gap-2 relative">
+                <button id="catButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="About">
+                    <i class="fa-solid fa-hurricane"></i>
+                </button>
+                <button id="helpButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="Gameplay Guide">
+                <i class="fa-solid fa-question"></i>
+                </button>
+                <div class="relative group">
+                    <button id="musicButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="BGM Playlist">
+                        <i class="fa-solid fa-music"></i>
+                    </button>
+
+                    <div id="musicMenu" class="hidden absolute top-12 right-0 z-50 bg-[#050505]/95 backdrop-blur-xl border border-white/10 rounded-none shadow-[0_0_30px_rgba(0,0,0,0.8)] p-5 w-64 text-sm border-t-2 border-t-cyan-500">
+                        <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                            <span class="font-bold text-cyan-400 tracking-widest text-xs uppercase" data-t="track_select">Select Track</span>
+                            <i class="fa-solid fa-list-ul text-slate-600"></i>
+                        </div>
+                        
+                        <ul id="musicListContainer" class="space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
+                            </ul>
+                        
+                        <div class="mt-4 pt-2 border-t border-white/10 flex items-center gap-2">
+                            <i class="fa-solid fa-volume-low text-xs text-slate-500"></i>
+                            <input type="range" id="bgmVolume" min="0" max="1" step="0.1" value="0.4" class="w-full h-1 bg-slate-700 rounded appearance-none cursor-pointer accent-cyan-500">
+                        </div>
+                    </div>
+                </div>
+                <button id="sfxButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="Toggle SFX">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+                <audio id="bgmAudio" loop preload="auto">
+                    <source src="Freshly Squeezed - Graham Donald Harry Preskett.m4a" type="audio/mpeg">
+                </audio>
+                <!-- [新增] 语言切换按钮 -->
+                <button id="langButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-cyan-400 font-mono text-xs font-bold w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="Switch Language">
+                    EN
+                </button>
+
+                <button id="settingsButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5">
+                    <i class="fa-solid fa-sliders"></i>
+                </button>
+                
+                <!-- 设置菜单 -->
+                <div id="settingsMenu" class="hidden absolute top-12 right-0 z-50 bg-[#050505]/95 backdrop-blur-xl border border-white/10 rounded-none shadow-[0_0_30px_rgba(0,0,0,0.8)] p-5 w-72 text-sm border-t-2 border-t-cyan-500">
+                    <div class="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                        <span class="font-bold text-cyan-400 tracking-widest text-xs uppercase" data-t="config">Configuration</span>
+                        <i class="fa-solid fa-gear text-slate-600"></i>
+                    </div>
+                    
+                    <div class="space-y-5">
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                                <label data-t="global_temp">Global Temp</label>
+                                <span id="globalTempValue" class="font-mono text-cyan-400">289K</span>
+                            </div>
+                            <input type="range" id="globalTempSlider" min="279" max="305" value="289" step="1" class="w-full">
+                        </div>
+                        
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                                <label data-t="shear">Vertical Shear</label>
+                                <span id="globalShearValue" class="font-mono text-amber-400">100</span>
+                            </div>
+                            <input type="range" id="globalShearSlider" min="0" max="200" value="100" step="1" class="w-full">
+                        </div>
+                        
+                        <div class="bg-white/5 p-3 border border-white/5">
+                            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2" data-t="obs_post">Observation Post</div>
+                            <input type="text" id="siteNameInput" placeholder="SITE CALLSIGN" class="w-full bg-black border border-white/20 px-2 py-1 mb-2 text-xs text-white font-mono focus:border-cyan-500 outline-none uppercase placeholder-slate-700">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="number" id="siteLonInput" placeholder="LON" step="0.1" class="w-full bg-black border border-white/20 px-2 py-1 text-xs text-white font-mono outline-none focus:border-cyan-500">
+                                <input type="number" id="siteLatInput" placeholder="LAT" step="0.1" class="w-full bg-black border border-white/20 px-2 py-1 text-xs text-white font-mono outline-none focus:border-cyan-500">
+                            </div>
+                        </div>
+
+                        <div class="bg-white/5 p-3 border border-white/5">
+                            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2" data-t="force_spawn">Force Spawn</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="number" id="customLonInput" placeholder="LON" step="0.1" class="w-full bg-black border border-white/20 px-2 py-1 text-xs text-white font-mono outline-none focus:border-cyan-500">
+                                <input type="number" id="customLatInput" placeholder="LAT" step="0.1" class="w-full bg-black border border-white/20 px-2 py-1 text-xs text-white font-mono outline-none focus:border-cyan-500">
+                            </div>
+                        </div>
+
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <input type="checkbox" id="showPathPointsCheckbox" class="accent-cyan-500 w-4 h-4 bg-transparent border-slate-600 rounded-none">
+                            <span class="text-slate-400 text-[10px] uppercase tracking-widest group-hover:text-cyan-400 transition-colors" data-t="track_nodes">Show Track Nodes</span>
+                        </label>
+                        
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <input type="checkbox" id="irBwCheckbox" class="accent-cyan-500 w-4 h-4 bg-transparent border-slate-600 rounded-none">
+                            <span class="text-slate-400 text-[10px] uppercase tracking-widest group-hover:text-cyan-400 transition-colors" data-t="irbw">IR IMAGE</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <div id="news-feed-container" class="fixed top-24 right-0 z-50 pointer-events-none flex flex-col items-end gap-3 pr-0 overflow-visible transition-all duration-300">
+            </div>
+        
+        <!-- 左侧 HUD 内容 -->
+        <div class="flex-1 flex items-start justify-between mt-6 relative pointer-events-none">
+            <!-- 左侧：遥测数据面板 -->
+            <div id="left-hud-content" class="w-72 md:w-80 flex flex-col gap-3 pointer-events-auto h-[calc(100vh-160px)] overflow-y-auto no-scrollbar pr-2">
+                
+                <!-- 卫星云图 -->
+                <div id="satellite-window" class="hidden aspect-square bg-black border border-white/20 relative shadow-2xl group overflow-hidden">
+                    <div class="absolute top-0 left-0 w-2 h-2 border-t border-l border-cyan-500 z-20"></div>
+                    <div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-cyan-500 z-20"></div>
+                    <div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-cyan-500 z-20"></div>
+                    <div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-cyan-500 z-20"></div>
+                    
+                    <div class="absolute top-3 left-3 z-10 flex items-center gap-2 bg-black/60 px-2 py-1 rounded">
+                        <div class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse-fast shadow-[0_0_8px_red]"></div>
+                        <span class="text-[9px] font-mono font-bold text-red-500 tracking-widest uppercase" data-t="sat_feed">SAT_FEED_LIVE</span>
+                    </div>
+                    
+                    <button id="close-sat-btn" onclick="collapseSat()" class="absolute top-2 right-2 z-50 text-red-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 p-1 cursor-pointer pointer-events-auto" title="Collapse View">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                    
+                    <canvas id="satCanvas" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity filter contrast-125"></canvas>
+                    <div class="scanline absolute inset-0 pointer-events-none opacity-30"></div>
+                </div>
+
+                <!-- [新增] 恢复按钮 (Collapsed State) (修改：添加 onclick) -->
+                <button id="restore-sat-btn" onclick="expandSat()" class="hidden w-full h-6 flex items-center justify-center bg-black/60 border border-white/10 text-cyan-600/50 hover:text-cyan-400 hover:border-cyan-500/30 hover:bg-cyan-900/10 font-mono text-[10px] transition-all cursor-pointer shadow-lg backdrop-blur-sm group mb-3" title="Expand Satellite View">
+                    <span class="group-hover:tracking-[0.5em] transition-all duration-300">^^^^^^^^^^^^</span>
+                </button>
+
+                <script>
+                    // 全局控制函数，确保点击绝对有效
+                    window.collapseSat = function() {
+                        const satWindow = document.getElementById('satellite-window');
+                        const restoreBtn = document.getElementById('restore-sat-btn');
+                        if (satWindow && restoreBtn) {
+                            satWindow.classList.add('hidden');
+                            restoreBtn.classList.remove('hidden');
+                        }
+                    }
+
+                    window.expandSat = function() {
+                        const satWindow = document.getElementById('satellite-window');
+                        const restoreBtn = document.getElementById('restore-sat-btn');
+                        if (satWindow && restoreBtn) {
+                            restoreBtn.classList.add('hidden');
+                            satWindow.classList.remove('hidden');
+                        }
+                    }
+                </script>
+
+                <!-- 核心数据面板 -->
+                <div id="info-panel" class="bg-black/60 backdrop-blur-md border-l-2 border-cyan-500/50 p-4 shadow-lg min-h-[200px] h-fit flex flex-col relative flex-shrink-0">
+                    <div class="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none"></div>
+
+                    <div id="initial-message" class="flex-grow flex flex-col items-center justify-center text-slate-600 py-10">
+                        <i class="fa-solid fa-satellite-dish text-4xl mb-4 opacity-30 animate-pulse"></i>
+                        <p class="text-[10px] font-mono uppercase tracking-widest" data-t="await_init">Awaiting Initialization...</p>
+                    </div>
+
+                    <div id="simulation-output" class="hidden flex flex-col gap-4 relative z-10 pb-1">
+                        <div class="border-b border-white/10 pb-2">
+                            <h2 id="status" class="text-3xl font-black text-white tracking-tight">TD 01W</h2>
+                            <div class="flex justify-between items-end mt-1">
+                                <p id="simulationTime" class="text-cyan-400 font-mono text-[10px] tracking-wider">T+0h</p>
+                                <div id="category" class="font-bold text-amber-400 text-xs uppercase tracking-wider bg-amber-900/20 px-2 py-0.5 border border-amber-500/30">--</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-white/5 p-2 border border-white/5">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-widest mb-1" data-t="wind_spd">Wind Spd</div>
+                                <div class="font-mono font-bold text-white text-lg leading-none"><span id="intensity">0</span> <span class="text-[10px] text-slate-500 font-normal"></span></div>
+                            </div>
+                            <div class="bg-white/5 p-2 border border-white/5">
+                                <div class="text-[9px] text-slate-400 uppercase tracking-widest mb-1" data-t="pressure">Pressure</div>
+                                <div class="font-mono font-bold text-cyan-300 text-lg leading-none"><span id="pressure">1000</span> <span class="text-[10px] text-slate-500 font-normal">hPa</span></div>
+                            </div>
+                        </div>
+
+                        <div class="font-mono text-[10px] text-slate-400 space-y-1 bg-black/20 p-2 rounded border border-white/5">
+                            <div class="flex justify-between">
+                                <span><i class="fa-solid fa-location-dot mr-1 text-cyan-600"></i><span id="latitude">0.0N</span>, <span id="longitude">0.0E</span></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span><i class="fa-solid fa-compass mr-1 text-cyan-600"></i><span id="direction">--</span> @ <span id="speed">0</span></span>
+                            </div>
+                            <div class="flex justify-between border-t border-white/10 pt-1 mt-1">
+                                <span data-t="ace_index">ACE Index:</span>
+                                <span id="ace" class="text-white font-bold">0.0</span>
+                            </div>
+                        </div>
+
+                        <div id="best-track-container" class="hidden mt-auto pt-2">
+                            <div class="text-[9px] font-bold text-green-500 mb-1 flex justify-between items-center">
+                                <span data-t="atcf_stream">ATCF DATA STREAM</span>
+                                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            </div>
+                            <textarea id="best-track-data" readonly class="w-full h-36 bg-black text-green-500 font-mono text-[9px] p-2 border border-green-900/50 resize-none outline-none mb-2 shadow-inner"></textarea>
+                            <div class="flex gap-2">
+                                <button id="copy-track-button" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] py-1.5 border border-white/10 transition" data-t="copy">COPY</button>
+                                <button id="download-track-button" class="flex-1 bg-cyan-900/40 hover:bg-cyan-900/60 text-cyan-300 text-[9px] py-1.5 border border-cyan-500/30 transition" data-t="export_img">EXPORT IMG</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部栏：核心控制台 -->
+        <div class="flex justify-center pointer-events-auto pb-4 md:pb-0">
+            <div class="
+                bg-black/80 backdrop-blur-xl border-t border-white/10
+                fixed bottom-0 left-0 w-full p-3 flex items-center gap-3 overflow-x-auto no-scrollbar z-50
+                md:relative md:bg-black/70 md:border md:rounded-2xl md:w-auto md:bottom-auto md:p-2.5
+            ">
+                <div id="wind-radii-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md border border-white/20 px-5 py-2 rounded-full flex items-center gap-6 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 bg-[#c0392b] border border-white/30 shadow-[0_0_8px_rgba(192,57,43,0.6)]"></div>
+                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">64 KT</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 bg-[#e67e22] border border-white/30 shadow-[0_0_8px_rgba(230,126,34,0.6)]"></div>
+                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">50 KT</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 bg-[#f1c40f] border border-white/30 shadow-[0_0_8px_rgba(241,196,15,0.6)]"></div>
+                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">34 KT</span>
+                        </div>
+                    </div>
+                <div id="radar-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
+                    <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
+                        <span>LIGHT</span>
+                        <span>MODERATE</span>
+                        <span>HARD</span>
+                    </div>
+                    <div class="w-full h-4 flex border border-white/30 rounded overflow-hidden">
+                        <div class="flex-1 bg-[#00ffff]"></div> <div class="flex-1 bg-[#0099ff]"></div> <div class="flex-1 bg-[#0000ff]"></div> <div class="flex-1 bg-[#00ff00]"></div> <div class="flex-1 bg-[#00cc00]"></div> <div class="flex-1 bg-[#008000]"></div> <div class="flex-1 bg-[#ffff00]"></div> <div class="flex-1 bg-[#ffcc00]"></div> <div class="flex-1 bg-[#ff8000]"></div> <div class="flex-1 bg-[#ff0000]"></div> <div class="flex-1 bg-[#cc0000]"></div> <div class="flex-1 bg-[#ff00ff]"></div> <div class="flex-1 bg-[#800080]"></div> <div class="flex-1 bg-[#ffffff]"></div> </div>
+                    <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
+                        <span>15</span>
+                        <span>30</span>
+                        <span>45</span>
+                        <span>60</span>
+                        <span>75+</span>
+                    </div>
+                </div>
+
+                <!-- [新增] 多普勒雷达图例 -->
+                <div id="doppler-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
+                    <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
+                        <span>INBOUND</span>
+                        <span>ZERO</span>
+                        <span>OUTBOUND</span>
+                    </div>
+                    <!-- 使用 CSS 线性渐变模拟多色阶 -->
+                    <div class="w-full h-4 border border-white/30 rounded overflow-hidden"
+                         style="background: linear-gradient(to right,
+                            #6d28d9 0%,   /* -50+ */
+                            #1e40af 10%,  /* -40 */
+                            #3b82f6 20%,  /* -30 */
+                            #15803d 30%,  /* -20 */
+                            #22c55e 40%,  /* -10 */
+                            #86efac 45%,  /* -5 */
+                            #9ca3af 50%,  /* 0 */
+                            #fde047 55%,  /* +5 */
+                            #fb923c 60%,  /* +10 */
+                            #f97316 70%,  /* +20 */
+                            #ef4444 80%,  /* +30 */
+                            #b91c1c 90%,  /* +40 */
+                            #ec4899 100%  /* +50+ */
+                         );">
+                    </div>
+                    <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
+                        <span>-50</span>
+                        <span>-25</span>
+                        <span>0</span>
+                        <span>+25</span>
+                        <span>+50</span>
+                    </div>
+                </div>
+                <!-- 启动按钮 -->
+                <button id="generateButton" class="group relative px-6 py-2 bg-slate-100 text-black rounded-xl font-bold text-xs md:text-sm tracking-wide shadow-lg hover:shadow-cyan-500/50 hover:bg-cyan-400 transition-all duration-300 overflow-hidden min-w-[120px]">
+                    <span class="relative z-10 flex items-center justify-center gap-2" data-t="initialize"><i class="fa-solid fa-power-off"></i> INITIALIZE</span>
+                    <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                </button>
+
+                <div class="h-6 w-px bg-white/10"></div>
+
+                <!-- 参数选择 -->
+                <div class="flex gap-2">
+                    <select id="basinSelector" class="bg-black/30 border border-white/10 text-slate-300 text-xs py-1.5 px-2 md:px-3 rounded-lg hover:border-cyan-500/50 focus:border-cyan-500 transition-colors outline-none cursor-pointer appearance-none text-center font-mono">
+                        <option value="WPAC">WPAC</option>
+                        <option value="EPAC">EPAC</option>
+                        <option value="NATL">NATL</option>
+                        <option value="NIO">NIO</option>
+                        <option value="SHEM">SHEM</option>
+                        <option value="SIO">SIO</option>
+                        <option value="SATL">SATL</option>
+                    </select>
+                    <select id="monthSelector" class="bg-black/30 border border-white/10 text-slate-300 text-xs py-1.5 px-2 md:px-3 rounded-lg hover:border-cyan-500/50 focus:border-cyan-500 transition-colors outline-none cursor-pointer appearance-none text-center font-mono w-16">
+                        <option value="1">JAN</option><option value="2">FEB</option><option value="3">MAR</option><option value="4">APR</option>
+                        <option value="5">MAY</option><option value="6">JUN</option><option value="7" selected>JUL</option><option value="8">AUG</option>
+                        <option value="9">SEP</option><option value="10">OCT</option><option value="11">NOV</option><option value="12">DEC</option>
+                    </select>
+                </div>
+
+                <div class="h-6 w-px bg-white/10"></div>
+
+                <!-- 控制按钮组 -->
+                <div class="flex gap-1.5">
+                    <button id="pauseButton" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-all disabled:opacity-20 border border-transparent hover:border-white/20" disabled>
+                        <i class="fa-solid fa-pause text-xs"></i>
+                    </button>
+                    
+                    <button id="toggleWindRadiiButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="Wind Field">
+                        <i class="fa-solid fa-bullseye"></i>
+                    </button>
+                    <button id="togglePressureButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="Pressure">
+                        <i class="fa-solid fa-wind"></i>
+                    </button>
+                    <button id="toggleHumidityButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="850mb RH">
+                        <i class="fa-solid fa-droplet"></i>
+                    </button>
+                    <button id="toggleWindFieldButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="100m Level Wind">
+                        <i class="fa-solid fa-right-left"></i>
+                    </button>
+                    <button id="togglePathButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="Forecast">
+                        <i class="fa-solid fa-route"></i>
+                    </button>
+                    <button id="toggleHistoryButton" class="bg-slate-900 border border-slate-600 text-slate-300 hover:text-cyan-400 w-8 h-8 rounded-lg flex items-center justify-center transition-all text-xs" title="History">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </button>
+                    <div class="h-6 w-px bg-white/10 mx-1"></div> <button id="generateJTWCButton" class="hidden relative group bg-red-900/40 border border-red-500/50 text-red-400 hover:bg-red-600 hover:text-white w-24 h-8 rounded-lg flex items-center justify-center transition-all text-[10px] font-bold tracking-wider uppercase shadow-[0_0_15px_rgba(220,38,38,0.3)] animate-pulse" title="Generate JTWC Graphic">
+                        <i class="fa-solid fa-file-image mr-2"></i> ICWC
+                        <span class="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-red-500/30">
+                            Export Graphic
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录模态框 -->
+    <div id="historyModal" class="hidden fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-[#0a0a0c] w-full max-w-lg rounded-none border border-white/20 shadow-2xl flex flex-col max-h-[80vh] relative">
+            <div class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-cyan-500"></div>
+            <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-cyan-500"></div>
+
+            <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+                <h2 class="text-sm font-bold text-white uppercase tracking-widest" data-t="sim_logs"><i class="fa-solid fa-database mr-2 text-cyan-500"></i>Simulation Logs</h2>
+                <button id="closeHistoryModal" class="text-slate-500 hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="p-4 overflow-y-auto flex-1 custom-scrollbar">
+                <ul id="historyList" class="space-y-1 font-mono text-xs"></ul>
+            </div>
+
+            <div id="history-best-track-container" class="hidden p-4 border-t border-white/10 bg-black">
+                <h3 class="text-[9px] font-bold text-cyan-400 mb-2 uppercase tracking-widest" data-t="raw_atcf">Raw ATCF Data</h3>
+                <textarea id="history-best-track-data" readonly class="w-full h-24 bg-[#050505] text-slate-400 p-2 border border-white/10 font-mono text-[9px] outline-none mb-2"></textarea>
+                <button id="downloadHistoryTrackButton" class="w-full bg-cyan-900/50 hover:bg-cyan-900 text-cyan-200 border border-cyan-500/30 text-xs font-bold py-2 transition uppercase tracking-wider" data-t="download_log">Download Log (.txt)</button>
+            </div>
+        </div>
+    </div>
+    <div id="jtwcModal" class="hidden fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white p-2 max-w-4xl w-full shadow-2xl relative">
+            <button id="closeJtwcModal" class="absolute -top-10 right-0 text-white hover:text-red-500 text-2xl transition-colors">
+                <i class="fa-solid fa-circle-xmark"></i>
+            </button>
+            <div id="jtwcOutput" class="w-full bg-[#99badd] border-2 border-black flex justify-center items-center overflow-hidden" style="min-height: 400px;">
+                </div>
+            <div class="bg-white text-black p-2 text-xs font-mono flex justify-between items-center border-t-2 border-black mt-1">
+                <span>VISUALIZATION PROVIDED BY INDEPENDENT CYCLONE WARNING CENTER</span>
+                <button id="saveJtwcImage" class="bg-blue-600 text-white px-3 py-1 hover:bg-blue-700 font-bold">SAVE IMAGE</button>
+            </div>
+        </div>
+    </div>
+    <div id="newsModal" class="hidden fixed inset-0 z-[200] bg-black/95 flex items-center justify-center backdrop-blur-xl">
+        <button id="closeNewsModal" class="absolute top-4 right-4 z-50 text-white/50 hover:text-white text-3xl transition-colors">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+
+        <div class="relative w-full max-w-[85vw] aspect-video bg-[#0f172a] shadow-2xl overflow-hidden border border-slate-700">
+            
+            <div class="absolute top-0 left-0 w-full h-16 bg-gradient-to-r from-blue-700 to-blue-600 z-20 flex items-center shadow-lg border-b border-white/10">
+                <div class="bg-white text-blue-700 font-black text-xl px-6 h-full flex items-center z-30 shadow-md italic tracking-tighter">
+                    WEATHER UPD
+                </div>
+                <div class="flex-1 overflow-hidden relative h-full flex items-center">
+                    <div id="newsTicker" class="whitespace-nowrap text-white font-mono text-2xl font-bold tracking-widest uppercase animate-marquee pl-4">
+                        </div>
+                </div>
+            </div>
+
+            <canvas id="newsCanvas" width="1728" height="972" class="w-full h-full object-cover"></canvas>
+            
+            <div class="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+            <div class="absolute bottom-4 right-6 text-white/30 font-mono text-sm font-bold tracking-[0.5em]">
+                STROM_INC BROADCAST SYSTEM
+            </div>
+        </div>
+    </div>
+    <div id="helpModal" class="hidden fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+            <div class="bg-[#0a0a0c] w-full max-w-4xl h-[600px] rounded-none border border-white/20 shadow-[0_0_50px_rgba(34,211,238,0.1)] flex flex-col relative transform scale-95 transition-transform duration-300 overflow-hidden">
+                <div class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-cyan-500 z-50"></div>
+                <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-cyan-500 z-50"></div>
+
+                <div class="p-4 border-b border-white/10 flex justify-between items-center bg-white/5 flex-shrink-0">
+                    <h2 class="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                        <i class="fa-solid fa-book-open text-cyan-500"></i>
+                        <span data-t="guide_title">Operational Manual</span>
+                    </h2>
+                    <button id="closeHelpModal" class="text-slate-500 hover:text-white transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="flex flex-1 overflow-hidden">
+                    <div class="w-64 bg-black/40 border-r border-white/10 p-3 space-y-1 flex-shrink-0 flex flex-col overflow-y-auto no-scrollbar">
+                        <button onclick="switchTab('tab-overview')" class="nav-btn active w-full text-left px-3 py-3 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-overview">
+                            <i class="fa-solid fa-house w-4 text-center"></i> <span data-t="tab_overview">Overview</span>
+                        </button>
+                        <div class="h-px bg-white/10 my-2"></div>
+                        <div class="text-[9px] text-slate-600 font-bold px-3 py-1 uppercase tracking-widest" data-t="nav_layers">Data Layers</div>
+                        
+                        <button onclick="switchTab('tab-radii')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-radii">
+                            <i class="fa-solid fa-bullseye w-4 text-center"></i> <span data-t="tab_radii">Wind Radii</span>
+                        </button>
+                        <button onclick="switchTab('tab-pressure')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-pressure">
+                            <i class="fa-solid fa-wind w-4 text-center"></i> <span data-t="tab_pressure">Steering Flow</span>
+                        </button>
+                        <button onclick="switchTab('tab-humidity')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-humidity">
+                            <i class="fa-solid fa-droplet w-4 text-center"></i> <span data-t="tab_humidity">850mb Humidity</span>
+                        </button>
+                        <button onclick="switchTab('tab-wind')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-wind">
+                            <i class="fa-solid fa-right-left w-4 text-center"></i> <span data-t="tab_wind">Low Level Wind</span>
+                        </button>
+                        <button onclick="switchTab('tab-forecast')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-forecast">
+                            <i class="fa-solid fa-route w-4 text-center"></i> <span data-t="tab_forecast">Forecast Track</span>
+                        </button>
+                        <button onclick="switchTab('tab-obs')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-obs">
+                            <i class="fa-solid fa-tower-cell w-4 text-center"></i> <span data-t="tab_obs">Observation Post</span>
+                        </button>
+                        <button onclick="switchTab('tab-icwc')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-icwc">
+                            <i class="fa-solid fa-file-contract w-4 text-center"></i> <span data-t="tab_icwc">ICWC Products</span>
+                        </button>
+                        <button onclick="switchTab('tab-about')" class="nav-btn w-full text-left px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-cyan-400 rounded border border-transparent transition-all flex items-center gap-3" data-target="tab-about">
+                                <i class="fa-solid fa-heart w-4 text-center text-red-500"></i> <span data-t="tab_about">About & Credits</span>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 bg-black/20 p-8 overflow-y-auto custom-scrollbar relative">
+
+                        <div id="tab-overview" class="tab-content space-y-6">
+                            <div>
+                                <h3 class="text-cyan-400 font-bold uppercase tracking-wider text-sm mb-4 border-l-4 border-cyan-500 pl-3" data-t="guide_core">Core Mechanics</h3>
+                                <p class="text-xs text-slate-300 mb-2 leading-relaxed" data-t="guide_core_desc">Simulate cyclone genesis based on atmospheric fluid dynamics.</p>
+                                <ul class="list-disc list-inside space-y-2 text-xs text-slate-400 marker:text-cyan-500">
+                                    <li data-t="guide_c1">Click <strong class="text-white">INITIALIZE</strong> to generate a random disturbance.</li>
+                                    <li data-t="guide_c2">Use <strong class="text-white">Settings</strong> to configure spawn points and environment.</li>
+                                    <li data-t="guide_c3">SST (Sea Surface Temp) drives intensification.</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3 class="text-emerald-400 font-bold uppercase tracking-wider text-sm mb-4 border-l-4 border-emerald-500 pl-3" data-t="guide_keys">Shortcuts</h3>
+                                <div class="grid grid-cols-2 gap-4 text-xs font-mono bg-white/5 p-4 rounded border border-white/5">
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">SPACE</span><span class="text-white" data-t="key_space">Pause / Resume</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">S</span><span class="text-white" data-t="key_s">Quick Restart</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">V</span><span class="text-white" data-t="key_v">Hide/Show Panel</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">1 / 2 / 3</span><span class="text-white">Speed Control</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">R</span><span class="text-white" data-t="key_r">Show/Hide Post Radar (Base Reflectivity)</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">D</span><span class="text-white" data-t="key_d">Show/Hide Post Radar (Radial Velocity)</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-radii" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-yellow-500/20 rounded flex items-center justify-center border border-yellow-500"><i class="fa-solid fa-bullseye text-2xl text-yellow-500"></i></div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_radii_title">Wind Radii Structure</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: STRUCTURAL ANALYSIS</p>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_radii_desc">
+                                Visualizes the extent of wind fields in four quadrants (NE, SE, SW, NW). Critical for determining the size and destructive potential of the system.
+                            </p>
+                            <div class="grid grid-cols-1 gap-3">
+                                <div class="bg-red-900/20 p-3 border-l-2 border-red-500 flex justify-between items-center">
+                                    <span class="text-xs font-bold text-red-400">64 KT (Hurricane Force)</span>
+                                    <span class="text-[10px] text-slate-400" data-t="radii_64">Core destruction zone</span>
+                                </div>
+                                <div class="bg-orange-900/20 p-3 border-l-2 border-orange-500 flex justify-between items-center">
+                                    <span class="text-xs font-bold text-orange-400">50 KT (Storm Force)</span>
+                                    <span class="text-[10px] text-slate-400" data-t="radii_50">Severe weather zone</span>
+                                </div>
+                                <div class="bg-yellow-900/20 p-3 border-l-2 border-yellow-500 flex justify-between items-center">
+                                    <span class="text-xs font-bold text-yellow-400">34 KT (Gale Force)</span>
+                                    <span class="text-[10px] text-slate-400" data-t="radii_34">Outer circulation limit</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-pressure" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-blue-500/20 rounded flex items-center justify-center border border-blue-500"><i class="fa-solid fa-wind text-2xl text-blue-500"></i></div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_pres_title">Steering Flow (500hPa)</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: SYNOPTIC FORCING</p>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_pres_desc">
+                                The primary driver of cyclone movement. Cyclones move around High Pressure ridges (clockwise in N.Hemisphere) and towards Low Pressure troughs.
+                            </p>
+                            <div class="bg-white/5 p-4 rounded border border-white/10 mt-4">
+                                <h4 class="text-xs font-bold text-amber-400 mb-2 uppercase" data-t="guide_god">Interactive Mode (God Mode)</h4>
+                                <p class="text-xs text-slate-400 mb-2" data-t="guide_g2">Drag <strong class="text-blue-400">H</strong> and <strong class="text-red-400">L</strong> handles on the map to reshape the subtropical ridge and alter the storm's path in real-time. Also, double click the map to place a high pressure manually.</p>
+                            </div>
+                        </div>
+
+                        <div id="tab-humidity" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-green-500/20 rounded flex items-center justify-center border border-green-500"><i class="fa-solid fa-droplet text-2xl text-green-500"></i></div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_hum_title">850mb Relative Humidity</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: THERMODYNAMICS</p>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_hum_desc">
+                                Indicates the moisture content available for the storm. Moisture is the fuel for convection.
+                            </p>
+                            <div class="grid grid-cols-2 gap-4 mt-2">
+                                <div class="bg-black/40 p-3 border border-green-500/30 rounded">
+                                    <div class="text-green-400 font-bold text-xs mb-1" data-t="hum_wet">Green Areas (>60%)</div>
+                                    <p class="text-[10px] text-slate-400" data-t="hum_wet_desc">Favorable for development. Look for deep moisture wrapping marked as green on the humidity map.</p>
+                                </div>
+                                <div class="bg-black/40 p-3 border border-yellow-600/30 rounded">
+                                    <div class="text-yellow-600 font-bold text-xs mb-1" data-t="hum_dry">Yellow/Brown Areas (>50%)</div>
+                                    <p class="text-[10px] text-slate-400" data-t="hum_dry_desc">Dry Air Intrusion (SAL). Can choke the storm's convection and weaken the system.</p>
+                                </div>
+                                <div class="bg-black/40 p-3 border border-yellow-600/30 rounded">
+                                    <div class="text-yellow-600 font-bold text-xs mb-1" data-t="foehn_effect">Foehn Effect</div>
+                                    <p class="text-[10px] text-slate-400" data-t="foehn_effect_desc">When the moist airflow from a tropical cyclone crosses mountain ranges, it undergoes adiabatic warming during its descent on the leeward slope, forming dry and hot descending air currents that cause humidity to decrease.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="tab-wind" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-purple-500/20 rounded flex items-center justify-center border border-purple-500"><i class="fa-solid fa-right-left text-2xl text-purple-500"></i></div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_wind_title">100m Sustained Wind</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: BOUNDARY LAYER</p>
+                                </div>
+                            </div>
+                             <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_wind_desc">
+                                A high-resolution vector field showing the immediate surface circulation. Useful for pinpointing the exact Low Level Circulation Center (LLCC).
+                            </p>
+                             <ul class="space-y-2 mt-2">
+                                <li class="flex items-start gap-2 text-xs text-slate-400">
+                                    <i class="fa-solid fa-arrow-right text-purple-400 mt-0.5"></i>
+                                    <span data-t="wind_p1">Visualizes inflow angles and convergence.</span>
+                                </li>
+                                <li class="flex items-start gap-2 text-xs text-slate-400">
+                                    <i class="fa-solid fa-arrow-right text-purple-400 mt-0.5"></i>
+                                    <span data-t="wind_p2">Helps identify when a wave organizes into a closed circulation (Depression stage).</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div id="tab-forecast" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-cyan-500/20 rounded flex items-center justify-center border border-cyan-500"><i class="fa-solid fa-route text-2xl text-cyan-500"></i></div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_fcst_title">Forecast Track</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: PREDICTION MODEL</p>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_fcst_desc">
+                                Projected path based on current steering flows and beta-drift calculations. Click any track point to show the projected path at the point, and you can generate a warning map!
+                            </p>
+                            <div class="space-y-3 mt-4">
+                                <div class="flex gap-3 items-center">
+                                    <div class="w-8 h-px bg-cyan-400 border-2 border-cyan-400 border-dashed"></div>
+                                    <div class="flex-1">
+                                        <h4 class="text-xs font-bold text-white" data-t="fcst_line">Center Line</h4>
+                                        <p class="text-[10px] text-slate-500" data-t="fcst_line_desc">Most probable track. Not a guarantee.</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-3 items-center">
+                                    <div class="w-8 h-4 bg-cyan-500/20 border border-cyan-500/50 skew-x-12"></div>
+                                    <div class="flex-1">
+                                        <h4 class="text-xs font-bold text-white" data-t="fcst_cone">Cone of Uncertainty</h4>
+                                        <p class="text-[10px] text-slate-500" data-t="fcst_cone_desc">The historical error margin. The center of the storm will remain within this cone 60-70% of the time. The storm can impact areas outside the cone.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="tab-obs" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-indigo-500/20 rounded flex items-center justify-center border border-indigo-500">
+                                    <i class="fa-solid fa-tower-cell text-2xl text-indigo-500"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_obs_title">Observation Post</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: GROUND TELEMETRY</p>
+                                </div>
+                            </div>
+                            
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_obs_desc">
+                                Deploy ground stations to gather localized telemetry. Essential for verifying satellite estimates and analyzing internal structure.
+                            </p>
+
+                            <div class="bg-white/5 p-3 border-l-2 border-indigo-500 mt-2 rounded-r">
+                                <h4 class="text-xs font-bold text-indigo-400 mb-2 uppercase" data-t="obs_how_title">Deployment Strategy</h4>
+                                <ul class="list-disc list-inside space-y-1 text-xs text-slate-400">
+                                    <li data-t="obs_how_1">Open <strong class="text-white">Settings</strong> <i class="fa-solid fa-gear"></i> menu.</li>
+                                    <li data-t="obs_how_2">Input Callsign (Name), Longitude, and Latitude to deploy.</li>
+                                </ul>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                                <div class="bg-black/40 p-3 border border-white/10 rounded hover:border-indigo-500/50 transition-colors">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="fa-solid fa-flag text-cyan-400 text-xs"></i>
+                                        <span class="text-cyan-400 font-bold text-xs" data-t="obs_wind">10-Min Sustained Wind</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400" data-t="obs_wind_desc">
+                                        Standard meteorological measurement used by JMA. Smoothed data to filter out momentary gusts.
+                                    </p>
+                                </div>
+
+                                <div class="bg-black/40 p-3 border border-white/10 rounded hover:border-indigo-500/50 transition-colors">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="fa-solid fa-cloud-showers-heavy text-blue-400 text-xs"></i>
+                                        <span class="text-blue-400 font-bold text-xs" data-t="obs_wx">Weather & Pressure</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400" data-t="obs_wx_desc">
+                                        Real-time Mean Sea Level Pressure (MSLP) and precipitation rate monitoring.
+                                    </p>
+                                </div>
+
+                                <div class="bg-black/40 p-3 border border-white/10 rounded hover:border-indigo-500/50 transition-colors">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="fa-solid fa-circle-notch text-green-400 text-xs"></i>
+                                        <span class="text-green-400 font-bold text-xs" data-t="obs_rad_z">Base Reflectivity (Z)</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400" data-t="obs_rad_z_desc">
+                                        Rain intensity visualization. Use Shortcut <strong>[R]</strong> to toggle. Critical for analyzing spiral rainbands and eyewall structure.
+                                    </p>
+                                </div>
+
+                                <div class="bg-black/40 p-3 border border-white/10 rounded hover:border-indigo-500/50 transition-colors">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="fa-solid fa-fan text-red-400 text-xs"></i>
+                                        <span class="text-red-400 font-bold text-xs" data-t="obs_rad_v">Radial Velocity (V)</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400" data-t="obs_rad_v_desc">
+                                        Doppler effect. Use Shortcut <strong>[D]</strong> to toggle.
+                                        <span class="text-blue-400">Blue/Green</span> = Inbound,
+                                        <span class="text-red-400">Red/Pink</span> = Outbound.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="tab-icwc" class="tab-content hidden space-y-6">
+                            <div class="flex items-center gap-4 mb-4">
+                                <div class="w-12 h-12 bg-red-500/20 rounded flex items-center justify-center border border-red-500">
+                                    <i class="fa-solid fa-file-contract text-2xl text-red-500"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-xl font-bold text-white uppercase" data-t="detail_icwc_title">ICWC Agency Products</h3>
+                                    <p class="text-[10px] text-slate-500 font-mono">LAYER: ADVISORY GENERATION</p>
+                                </div>
+                            </div>
+                            
+                            <p class="text-xs text-slate-300 leading-relaxed" data-t="detail_icwc_desc">
+                            The Independent Cyclone Warning Center (ICWC) is a tropical cyclone monitoring agency affiliated with STROM INC, providing tropical cyclone analysis and forecasting services worldwide. Accessible via the <strong>ICWC</strong> button when a track is selected.
+                            </p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                <div class="bg-black/40 p-4 border border-white/10 rounded hover:border-red-500/50 transition-colors group">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i class="fa-solid fa-map text-red-400 text-xs group-hover:text-red-300"></i>
+                                        <span class="text-red-400 font-bold text-xs group-hover:text-red-300" data-t="icwc_graphic">Warning Graphic</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 leading-relaxed" data-t="icwc_graphic_desc">
+                                        Standard operational map showing past track, forecast cone, wind radii, and key city impacts.
+                                    </p>
+                                </div>
+
+                                <div class="bg-black/40 p-4 border border-white/10 rounded hover:border-purple-500/50 transition-colors group">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i class="fa-solid fa-percent text-purple-400 text-xs group-hover:text-purple-300"></i>
+                                        <span class="text-purple-400 font-bold text-xs group-hover:text-purple-300" data-t="icwc_prob">Wind Speed Probability</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 leading-relaxed" data-t="icwc_prob_desc">
+                                        Showing the cumulative probability of 34kt (Tropical Storm) or 64kt (Typhoon) winds at any location over the next 72 hours.
+                                    </p>
+                                </div>
+
+                                <div class="bg-black/40 p-4 border border-white/10 rounded hover:border-indigo-500/50 transition-colors group md:col-span-2">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i class="fa-solid fa-tower-broadcast text-indigo-400 text-xs group-hover:text-indigo-300"></i>
+                                        <span class="text-indigo-400 font-bold text-xs group-hover:text-indigo-300" data-t="icwc_station">Station Observations</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 leading-relaxed" data-t="icwc_station_desc">
+                                        Retrieves historical telemetry logs for a specific time step. visualizes localized wind barbs, MSLP trends, and weather conditions relative to the storm's position.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="tab-about" class="tab-content hidden h-full flex flex-col items-center justify-center text-center space-y-8">
+                                    <div class="relative group">
+                                        <div class="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur opacity-20 group-hover:opacity-50 transition duration-1000"></div>
+                                        <div class="relative w-64 md:w-80">
+                                            <img src="a.png" alt="Cat" class="w-full h-auto drop-shadow-2xl hover:scale-105 transition-transform duration-500 cursor-pointer" title="Meow!">
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-4 max-w-lg">
+                                        <h2 class="text-3xl md:text-4xl font-black text-white tracking-tighter leading-tight drop-shadow-lg">
+                                            Thank you for visiting!
+                                        </h2>
+                                        <div class="h-1 w-24 bg-cyan-500 mx-auto rounded-full"></div>
+                                        <p class="text-xl font-mono font-bold text-cyan-400 tracking-widest uppercase">
+                                            - TYBoard @ECD
+                                        </p>
+                                        <p class="text-xs text-slate-500 pt-8 font-mono">
+                                            STROM_INC // BUILD 2026
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-2 border-t border-white/10 bg-black/50 text-[9px] text-center text-slate-600 font-mono flex-shrink-0">
+                    TCS-SIM ENGINE v2.0 // ENCELADUS BUILD
+                </div>
+            </div>
+        </div>
+    
+    <!-- 拖拽逻辑脚本 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 使元素可拖拽的函数
+            function makeDraggable(elementId) {
+                const element = document.getElementById(elementId);
+                if (!element) return;
+
+                let isDragging = false;
+                let currentX;
+                let currentY;
+                let initialX;
+                let initialY;
+                let xOffset = 0;
+                let yOffset = 0;
+
+                // 统一监听父元素，但通过 target 判断是否是手柄区域（如果需要更精确控制）
+                // 这里为了体验流畅，允许整个容器拖拽，但排除了 Input/Button
+                element.addEventListener("mousedown", dragStart);
+                element.addEventListener("touchstart", dragStart, { passive: false });
+
+                function dragStart(e) {
+                    // 允许点击子元素（例如按钮），不触发拖拽
+                    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA' || e.target.closest('button')) return;
+                    
+                    // 如果点击的是图表内容本身(SVG)，允许拖拽，但如果是交互元素则需小心
+                    // 此处默认允许
+
+                    let clientX, clientY;
+                    if (e.type === "touchstart") {
+                        clientX = e.touches[0].clientX;
+                        clientY = e.touches[0].clientY;
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
+
+                    // 记录初始点击位置
+                    if (element.style.transform.includes('translate')) {
+                         // 已经是 translate 状态，直接基于当前位置计算
+                    } else {
+                         // 第一次拖拽，处理居中定位的转换
+                         const rect = element.getBoundingClientRect();
+                         element.style.transform = 'none';
+                         element.style.left = rect.left + 'px';
+                         element.style.top = rect.top + 'px';
+                         // 移除 transform 后，offset 归零
+                         xOffset = 0;
+                         yOffset = 0;
+                    }
+
+                    initialX = clientX - xOffset;
+                    initialY = clientY - yOffset;
+
+                    isDragging = true;
+                    element.classList.add('draggable-active');
+                }
+
+                function drag(e) {
+                    if (isDragging) {
+                        e.preventDefault();
+                        
+                        let clientX, clientY;
+                        if (e.type === "touchmove") {
+                            clientX = e.touches[0].clientX;
+                            clientY = e.touches[0].clientY;
+                        } else {
+                            clientX = e.clientX;
+                            clientY = e.clientY;
+                        }
+
+                        currentX = clientX - initialX;
+                        currentY = clientY - initialY;
+
+                        xOffset = currentX;
+                        yOffset = currentY;
+
+                        setTranslate(currentX, currentY, element);
+                    }
+                }
+
+                function setTranslate(xPos, yPos, el) {
+                    el.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
+                }
+
+                function dragEnd(e) {
+                    if (!isDragging) return;
+                    initialX = currentX;
+                    initialY = currentY;
+                    isDragging = false;
+                    element.classList.remove('draggable-active');
+                }
+
+                // 绑定到 document 以防止鼠标移出元素后失效
+                document.addEventListener("mousemove", drag);
+                document.addEventListener("mouseup", dragEnd);
+                
+                document.addEventListener("touchmove", drag, { passive: false });
+                document.addEventListener("touchend", dragEnd);
+            }
+
+            // 初始化拖拽
+            makeDraggable("map-info-box");
+            makeDraggable("intensity-chart-section");
+        });
+    </script>
+
+    <!-- [新增] 卫星云图面板折叠逻辑 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const satWindow = document.getElementById('satellite-window');
+            const closeBtn = document.getElementById('close-sat-btn');
+            const restoreBtn = document.getElementById('restore-sat-btn');
+
+            if (closeBtn && satWindow && restoreBtn) {
+                closeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    satWindow.classList.add('hidden');
+                    restoreBtn.classList.remove('hidden');
+                });
+
+                restoreBtn.addEventListener('click', () => {
+                    restoreBtn.classList.add('hidden');
+                    satWindow.classList.remove('hidden');
+                });
+            }
+        });
+    </script>
+
+    <!-- [新增] 多语言支持脚本 -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const langButton = document.getElementById('langButton');
+            let currentLang = 'EN'; // 默认为英文，与HTML静态内容一致
+
+            const translations = {
+                'EN': {
+                    'config': 'Configuration',
+                    'global_temp': 'Global Temp',
+                    'shear': 'Vertical Shear',
+                    'obs_post': 'Observation Post',
+                    'force_spawn': 'Force Spawn',
+                    'track_nodes': 'Show Track Nodes',
+                    'irbw': 'IR Image',
+                    'track_select': 'SELECT TRACK',
+                    'sat_feed': 'SAT_FEED_LIVE',
+                    'await_init': 'Awaiting Initialization...',
+                    'wind_spd': 'Wind Spd',
+                    'pressure': 'Pressure',
+                    'ace_index': 'ACE Index:',
+                    'atcf_stream': 'ATCF DATA STREAM',
+                    'copy': 'COPY',
+                    'export_img': 'EXPORT IMG',
+                    'initialize': '<i class="fa-solid fa-power-off"></i> INITIALIZE',
+                    'intensity_profile': 'Intensity Profile',
+                    'sim_logs': '<i class="fa-solid fa-database mr-2 text-cyan-500"></i>Simulation Logs',
+                    'raw_atcf': 'Raw ATCF Data',
+                    'download_log': 'Download Log (.txt)',
+                    'drag': 'DRAG',
+                    'guide_title': 'Operational Manual',
+                    'tab_overview': 'Overview',
+                    'nav_layers': 'Data Layers',
+                    'tab_radii': 'Wind Radii',
+                    'tab_pressure': 'Steering Flow',
+                    'tab_humidity': '850mb Humidity',
+                    'tab_wind': 'Low Level Wind',
+                    'tab_forecast': 'Forecast Track',
+                    
+                    'guide_core': 'Core Mechanics',
+                    'guide_core_desc': 'Simulate cyclone genesis based on atmospheric fluid dynamics.',
+                    'guide_c1': 'Click <strong>INITIALIZE</strong> to spawn a disturbance.',
+                    'guide_c2': 'Use <strong>Settings</strong> to configure spawn points.',
+                    'guide_c3': 'SST (Sea Surface Temp) drives intensification.',
+                    
+                    'guide_keys': 'Shortcuts',
+                    'key_space': 'Pause / Resume',
+                    'key_s': 'Quick Restart',
+                    'key_v': 'Hide / Show Panel',
+                    'key_r': 'Post Radar (Base Reflectivity)',
+                    'key_d': 'Post Radar (Radial Velocity)',
+                    
+                    'detail_radii_title': 'Wind Radii Structure',
+                    'detail_radii_desc': 'Visualizes the extent of wind fields in four quadrants. Critical for determining destructive potential.',
+                    'radii_64': 'Hurricane Warning zone',
+                    'radii_50': 'Storm Warning Zone',
+                    'radii_34': 'Gale Warning Zone',
+                    
+                    'detail_pres_title': 'Steering Flow (500hPa)',
+                    'detail_pres_desc': 'The primary driver of movement. Cyclones follow the edge of High Pressure ridges.',
+                    'guide_god': 'Interactive God Mode',
+                    'guide_g2': 'Drag H/L handles to reshape the ridge and alter the path. Also, double click the map to place a high pressure manually.',
+                    
+                    'detail_hum_title': '850mb Relative Humidity',
+                    'detail_hum_desc': 'Moisture availability. Moisture is fuel for convection.',
+                    'hum_wet': 'Green Areas (>70%)',
+                    'hum_wet_desc': 'Favorable. Look for deep moisture wrapping marked as green on the humidity map.',
+                    'hum_dry': 'Yellow/Brown Areas (<50%)',
+                    'hum_dry_desc': 'Dry Air Intrusion. Chokes convection and weakens the storm.',
+                    'foehn_effect': 'Foehn Effect',
+                    'foehn_effect_desc': 'When the moist airflow from a tropical cyclone crosses mountain ranges, it undergoes adiabatic warming during its descent on the leeward slope, forming dry and hot descending air currents that cause humidity to decrease.',
+                    
+                    'detail_wind_title': '100m Sustained Wind',
+                    'detail_wind_desc': 'High-resolution vector field showing surface circulation.',
+                    'wind_p1': 'Visualizes inflow and convergence.',
+                    'wind_p2': 'Identifies closed circulation (LLCC).',
+                    
+                    'detail_fcst_title': 'Forecast Track',
+                    'detail_fcst_desc': 'Projected path based on current steering flows and beta-drift.',
+                    'fcst_line': 'Center Line',
+                    'fcst_line_desc': 'Most probable track.',
+                    'fcst_cone': 'Cone of Uncertainty',
+                    'fcst_cone_desc': 'Historical error margin. Storm center stays within cone 60-70% of the time.',
+                    'tab_obs': 'Observation Post',
+                    'detail_obs_title': 'Observation Post',
+                    'detail_obs_desc': 'Deploy ground stations to gather localized telemetry. Essential for verifying satellite estimates and analyzing internal structure.',
+                    'obs_how_title': 'Deployment Strategy',
+                    'obs_how_1': 'Open <strong>Settings</strong> <i class="fa-solid fa-gear"></i> menu.',
+                    'obs_how_2': 'Input Callsign (Name), Longitude, and Latitude to deploy.',
+                    'obs_wind': '10-Min Sustained Wind',
+                    'obs_wind_desc': 'Standard meteorological measurement used by JMA. Smoothed data to filter out momentary gusts.',
+                    'obs_wx': 'Weather & Pressure',
+                    'obs_wx_desc': 'Real-time Mean Sea Level Pressure (MSLP) and precipitation rate monitoring.',
+                    'obs_rad_z': 'Base Reflectivity (Z)',
+                    'obs_rad_z_desc': 'Rain intensity visualization. Use Shortcut <strong>[R]</strong> to toggle. Critical for analyzing spiral rainbands and eyewall structure.',
+                    'obs_rad_v': 'Radial Velocity (V)',
+                    'obs_rad_v_desc': 'Doppler effect. Use Shortcut <strong>[D]</strong> to toggle. <span class="text-blue-400">Blue/Green</span> = Inbound, <span class="text-red-400">Red/Pink</span> = Outbound.',
+                    'tab_icwc': 'ICWC Products',
+                    'detail_icwc_title': 'ICWC Agency Products',
+                    'detail_icwc_desc': 'The Independent Cyclone Warning Center (ICWC) is a tropical cyclone monitoring agency affiliated with STROM INC, providing tropical cyclone analysis and forecasting services worldwide. Accessible via the <strong>ICWC</strong> button when a track is selected.',
+                    'icwc_graphic': 'Warning Graphic',
+                    'icwc_graphic_desc': 'Standard operational map showing past track, forecast cone, wind radii, and key city impacts.',
+                    'icwc_prob': 'Wind Speed Probability',
+                    'icwc_prob_desc': 'Showing the cumulative probability of 34kt (Tropical Storm) or 64kt (Typhoon) winds at any location over the next 72 hours.',
+                    'icwc_station': 'Station Observations',
+                    'icwc_station_desc': 'Retrieves historical telemetry logs for a specific time step. Visualizes localized wind barbs, MSLP trends, and weather conditions relative to the storm position.'
+                },
+                'CN': {
+                    'config': '系统配置',
+                    'global_temp': '全球气温',
+                    'shear': '垂直风切变',
+                    'obs_post': '观测站点',
+                    'force_spawn': '强制生成',
+                    'track_nodes': '显示路径节点',
+                    'irbw': 'IR图像',
+                    'track_select': '选择曲目',
+                    'sat_feed': '卫星实时回传',
+                    'await_init': '等待启动...',
+                    'wind_spd': '最大风速',
+                    'pressure': '中心气压',
+                    'ace_index': 'ACE指数:',
+                    'atcf_stream': 'ATCF 数据流',
+                    'copy': '复制数据',
+                    'export_img': '导出图像',
+                    'initialize': '<i class="fa-solid fa-power-off"></i> 系统启动',
+                    'intensity_profile': '强度变化曲线',
+                    'sim_logs': '<i class="fa-solid fa-database mr-2 text-cyan-500"></i>模拟记录日志',
+                    'raw_atcf': '原始 ATCF 数据',
+                    'download_log': '下载日志 (.txt)',
+                    'drag': '拖拽',
+                    'guide_title': '操作说明书',
+                    'tab_overview': '系统概览',
+                    'nav_layers': '数据图层解析',
+                    'tab_radii': '风圈结构',
+                    'tab_pressure': '引导气流',
+                    'tab_humidity': '850mb 湿度',
+                    'tab_wind': '底层风场',
+                    'tab_forecast': '预测路径',
+                    
+                    'guide_core': '核心机制',
+                    'guide_core_desc': '基于大气流体力学模拟气旋生成。',
+                    'guide_c1': '点击 <strong>系统启动</strong> 生成扰动。',
+                    'guide_c2': '使用 <strong>设置</strong> 配置生成点。',
+                    'guide_c3': 'SST (海温) 是强度发展的动力。',
+                    
+                    'guide_keys': '快捷键',
+                    'key_space': '暂停 / 继续',
+                    'key_s': '快速重启',
+                    'key_v': '隐藏 / 显示面板',
+                    'key_r': '显示 / 隐藏站点雷达（基础反射率）',
+                    'key_d': '显示 / 隐藏站点雷达（多普勒径向速度）',
+                    
+                    'detail_radii_title': '风圈结构分析',
+                    'detail_radii_desc': '显示气旋四象限的风力范围。对于判断破坏力和风暴尺度至关重要。',
+                    'radii_64': '飓风警报区 (12级+)',
+                    'radii_50': '暴风警报区 (10级+)',
+                    'radii_34': '烈风警报区 (8级+)',
+                    
+                    'detail_pres_title': '500hPa 层面引导气流',
+                    'detail_pres_desc': '气旋移动的主要驱动力。气旋通常沿着副热带高压(High)的边缘移动，并被低压槽(Low)吸引。',
+                    'guide_god': '上帝模式 (交互)',
+                    'guide_g2': '拖拽地图上的 H/L 手柄来改变副高形态，实时修正台风路径。此外，双击地图可人为添加一个副高单体。',
+                    
+                    'detail_hum_title': '850mb 相对湿度',
+                    'detail_hum_desc': '显示大气水汽含量。水汽是深对流爆发的燃料。',
+                    'hum_wet': '绿色区域 (>70%)',
+                    'hum_wet_desc': '有利于发展。观察核心是否被深厚水汽（在等湿度线图上用绿色实心表示）包裹。',
+                    'hum_dry': '黄/棕色区域',
+                    'hum_dry_desc': '干空气入侵 (SAL)。会切断水汽供应，抑制对流并导致气旋减弱。',
+                    'foehn_effect': '焚风效应',
+                    'foehn_effect_desc': '热带气旋的湿润气流越过山脉后，在背风坡下沉过程中因绝热增温，形成又干又热的下沉气流，导致湿度急剧下降。',
+                    
+                    'detail_wind_title': '100m 持续风场',
+                    'detail_wind_desc': '高分辨率矢量场，显示近地面的实际空气流动。',
+                    'wind_p1': '可视化气流的流入角度与辐合情况。',
+                    'wind_p2': '用于识别波动何时构建出闭合环流 (LLCC)。',
+                    
+                    'detail_fcst_title': '路径预测模型',
+                    'detail_fcst_desc': '基于当前引导气流和 Beta 漂移效应实时计算的预计轨迹。点击任意历史路径点查看当时的路径预测，并生成警告地图！',
+                    'fcst_line': '中心路径',
+                    'fcst_line_desc': '概率最高的路径，但并非绝对路径。',
+                    'fcst_cone': '不确定性锥 (概率圆)',
+                    'fcst_cone_desc': '历史误差范围。气旋中心有 60-70% 的概率落在锥内。注意：锥外地区仍可能受灾。',
+                    'tab_obs': '观测站点',
+                    'detail_obs_title': '地面观测站',
+                    'detail_obs_desc': '部署地面站点以收集局部遥测数据。对于验证卫星估算强度和分析内部结构至关重要。',
+                    'obs_how_title': '部署方法',
+                    'obs_how_1': '打开 <strong>系统配置</strong> <i class="fa-solid fa-gear"></i> 菜单。',
+                    'obs_how_2': '在“观测站点”栏输入呼号、经度和纬度进行部署。',
+                    'obs_wind': '十分钟持续风速',
+                    'obs_wind_desc': '国际通用的气象测量标准。数据经过平滑处理以过滤阵风干扰。',
+                    'obs_wx': '天气状况',
+                    'obs_wx_desc': '实时监测天气状态。',
+                    'obs_rad_z': '雷达：基础反射率 (Z)',
+                    'obs_rad_z_desc': '降水强度可视化。快捷键 <strong>[R]</strong> 切换。用于分析螺旋雨带和眼墙结构。',
+                    'obs_rad_v': '雷达：径向速度 (V)',
+                    'obs_rad_v_desc': '多普勒效应监测。快捷键 <strong>[D]</strong> 切换。<span class="text-blue-400">蓝/绿</span> 为移向雷达(Inbound)，<span class="text-red-400">红/粉</span> 为远离雷达(Outbound)。',
+                    'tab_icwc': 'ICWC 预报产品',
+                    'detail_icwc_title': 'ICWC 机构产品',
+                    'detail_icwc_desc': '独立气旋预警中心 (ICWC) 成立于1145年1月4日，是隶属于STROM INC的热带气旋监测机构，为全球提供热带气旋分析和预报服务。选中任意路径点后点击底部 <strong>ICWC</strong> 按钮即可访问。',
+                    'icwc_graphic': '警报图 (Warning Graphic)',
+                    'icwc_graphic_desc': '标准作业地图，显示历史路径、预测锥（概率圆）、风圈大小及对主要城市的影响。',
+                    'icwc_prob': '风速概率 (Wind Prob)',
+                    'icwc_prob_desc': '计算未来 72 小时内任意地点遭遇 34kt (热带风暴级) 或 64kt (台风级) 大风的累积概率。',
+                    'icwc_station': '站点观测记录 (Station Obs)',
+                    'icwc_station_desc': '检索特定时间步长的历史遥测日志。可视化站点当时的风羽、海平面气压趋势以及相对于风暴位置的天气状况。'
+                }
+            };
+
+            // 动态内容映射表 (JS 生成的中文 -> 英文)
+            const dynamicTranslations = {
+                "生成": "START",
+                "暂停": "PAUSE",
+                "继续": "RESUME",
+                "模拟进行中...": "SIMULATION ACTIVE...",
+                "模拟时间: ": "SIM ",
+                "模拟结束": "SIMULATION ENDED",
+                "模拟已暂停": "SIMULATION PAUSED",
+                "复制数据": "COPY DATA",
+                "已复制!": "COPIED!",
+                "热带低压": "TD",
+                "热带风暴": "TS",
+                "台风": "Typhoon",
+                "强台风": "Severe Typhoon",
+                "超强台风": "Super Typhoon",
+                "1级飓风": "Cat 1 Hurricane",
+                "2级飓风": "Cat 2 Hurricane",
+                "3级飓风 (强)": "Cat 3 Hurricane",
+                "4级飓风 (强)": "Cat 4 Hurricane",
+                "5级飓风 (巨)": "Cat 5 Hurricane",
+                "低压区": "LPA",
+                "副热带低压": "Subtropical Depression",
+                "副热带风暴": "Subtropical Storm",
+                "温带气旋": "Extratropical",
+                "正在温带转化": "Extratropical Transition"
+            };
+
+            function updateStaticText() {
+                document.querySelectorAll('[data-t]').forEach(el => {
+                    const key = el.getAttribute('data-t');
+                    if (translations[currentLang][key]) {
+                        el.innerHTML = translations[currentLang][key];
+                    }
+                });
+                
+                // 更新 placeholder
+                const siteNameInput = document.getElementById('siteNameInput');
+                if (siteNameInput) {
+                    siteNameInput.placeholder = currentLang === 'EN' ? "SITE CALLSIGN" : "站点呼号";
+                }
+                
+                langButton.textContent = currentLang === 'EN' ? "EN" : "CN";
+                localStorage.setItem('userLanguage', currentLang); // [修复] 使用正确的变量名 currentLang
+            }
+
+            langButton.addEventListener('click', () => {
+                currentLang = currentLang === 'EN' ? 'CN' : 'EN';
+                updateStaticText();
+                // 触发一次动态检查以立即更新当前状态文本
+                // 强制更新特殊按钮的文本
+                const generateBtn = document.getElementById('generateButton');
+                if (generateBtn) {
+                    if (currentLang === 'EN') {
+                        generateBtn.innerHTML = `<span class="relative z-10 flex items-center justify-center gap-2"><i class="fa-solid fa-power-off"></i> START</span>`;
+                    } else {
+                        generateBtn.innerHTML = `<span class="relative z-10 flex items-center justify-center gap-2"><i class="fa-solid fa-power-off"></i> 系统启动</span>`;
+                    }
+                }
+                checkDynamicText();
+            });
+
+            const targetNodes = [
+                document.getElementById('status'),
+                document.getElementById('category'),
+                document.getElementById('generateButton'), // 按钮文本会被替换
+                document.getElementById('pauseButton'),
+                document.getElementById('copy-track-button'),
+                document.getElementById('simulationTime')
+            ];
+
+            const observerConfig = { childList: true, characterData: true, subtree: true };
+
+            const observer = new MutationObserver((mutations) => {
+                if (currentLang === 'CN') return; // 中文模式下不拦截，直接显示 JS 原文
+
+                mutations.forEach((mutation) => {
+                    const node = mutation.target;
+                    
+                    // 1. 处理纯文本节点更新
+                    if (node.nodeType === 3) { // Text node
+                        const text = node.textContent;
+                        // 替换模拟时间前缀
+                        if (text.includes("模拟时间 ")) {
+                            node.textContent = text.replace("模拟时间: ", "SIM ").replace(" 小时", " HRS");
+                            return;
+                        }
+                        if (text.includes("速度切换")) {
+                            // 使用正则分割：支持中文冒号(：)、英文冒号(:) 以及其后的任意空格
+                            const parts = text.split(/[:：]\s*/);
+                            
+                            if (parts.length > 1) {
+                                const speedValue = parts[1];
+                                node.textContent = `SPEED CHANGED: ${speedValue}`;
+                            }
+                            return;
+                        }
+                        // 替换状态词汇
+                        if (dynamicTranslations[text]) {
+                            node.textContent = dynamicTranslations[text];
+                            return;
+                        }
+                    }
+                    // 2. 处理按钮 innerHTML 被覆盖的情况 (main.js: generateButton.textContent = "生成")
+                    else if (node.tagName === 'BUTTON' && node.id === 'generateButton') {
+                        if (node.textContent === '生成') {
+                            node.innerHTML = `<span class="relative z-10 flex items-center justify-center gap-2"><i class="fa-solid fa-power-off"></i> START</span>`;
+                        }
+                    }
+                    else if (node.tagName === 'BUTTON' && node.id === 'pauseButton') {
+                         if (dynamicTranslations[node.textContent]) {
+                            node.textContent = dynamicTranslations[node.textContent];
+                        }
+                    }
+                    else if (node.tagName === 'BUTTON' && node.id === 'copy-track-button') {
+                         if (dynamicTranslations[node.textContent]) {
+                            node.textContent = dynamicTranslations[node.textContent];
+                        }
+                    }
+                    else if (node.id === 'status' || node.id === 'category') {
+                         if (dynamicTranslations[node.textContent]) {
+                            node.textContent = dynamicTranslations[node.textContent];
+                        }
+                    }
+                    else if (node.id === 'simulationTime') {
+                        const text = node.textContent;
+                        if (text.includes("模拟时间: ")) {
+                            node.textContent = text.replace("模拟时间: ", "SIM ").replace(" 小时", " HRS");
+                        }
+                    }
+                });
+            });
+
+            // 开始监听动态元素
+            targetNodes.forEach(node => {
+                if (node) observer.observe(node, observerConfig);
+            });
+            
+            // 辅助函数：手动触发一次检查 (用于切换语言时立即生效)
+            function checkDynamicText() {
+                if (currentLang === 'CN') {
+                    // 如果切回中文，这里很难恢复原始 JS 状态，
+                    // 但由于 main.js 的循环在跑，下一帧它会自动改回中文，所以通常不需要手动改回。
+                    return;
+                }
+                
+                // 强制检查当前值并翻译
+                targetNodes.forEach(el => {
+                    if(!el) return;
+                    
+                    // 特殊处理时间
+                    if(el.id === 'simulationTime' && el.textContent.includes('模拟时间 ')) {
+                        el.textContent = el.textContent.replace('模拟时间: ', 'SIM ').replace(' 小时', ' HRS');
+                    }
+                    
+                    // 处理按钮图标恢复
+                    if (el.id === 'generateButton' && el.textContent.trim() === '生成') {
+                         el.innerHTML = `<span class="relative z-10 flex items-center justify-center gap-2"><i class="fa-solid fa-power-off"></i> START</span>`;
+                    } else if (dynamicTranslations[el.textContent.trim()]) {
+                        el.textContent = dynamicTranslations[el.textContent.trim()];
+                    }
+                });
+            }
+        });
+    </script>
+    <script>
+            window.switchTab = function(tabId) {
+                // 1. 隐藏所有内容区域
+                document.querySelectorAll('.tab-content').forEach(el => {
+                    el.classList.add('hidden');
+                });
+                // 2. 显示目标内容
+                const targetContent = document.getElementById(tabId);
+                if(targetContent) targetContent.classList.remove('hidden');
+
+                // 3. 更新侧边栏按钮样式
+                document.querySelectorAll('.nav-btn').forEach(btn => {
+                    btn.classList.remove('text-cyan-400', 'bg-white/5', 'border-cyan-500/30');
+                    btn.classList.add('text-slate-400', 'border-transparent');
+                    
+                    // 如果是当前选中的按钮
+                    if(btn.dataset.target === tabId) {
+                        btn.classList.remove('text-slate-400', 'border-transparent');
+                        btn.classList.add('text-cyan-400', 'bg-white/5', 'border-l-2', 'border-cyan-500');
+                    }
+                });
+            }
+            
+            // 默认激活概览页
+            document.addEventListener('DOMContentLoaded', () => {
+                switchTab('tab-overview');
+            });
+        </script>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // --- 配置 ---
+        const loadingTime = 1000; // 持续时间 1000ms = 1秒
+        const hints = [
+            "💡 Hint: Warm SSTs (>26.5°C) are essential for cyclone formation.",
+            "💡 Hint: High wind shear can tear a storm apart.",
+            "💡 Hint: Double-click the map while opening the pressure tab to spawn a High Pressure system.",
+            "💡 Hint: Land interaction weakens storms quickly due to friction.",
+            "💡 Hint: Set observation post in the settings!",
+            "💡 Hint: Use the 'History' tab to check historical data.",
+            "💡 Hint: Try simulating a winter storm by changing the month!",
+            "💡 Hint: Press Spacebar to pause/resume the simulation."
+        ];
+
+        // --- 1. 设置随机提示 ---
+        const hintElement = document.getElementById('loading-hint');
+        const randomHint = hints[Math.floor(Math.random() * hints.length)];
+        hintElement.innerText = randomHint;
+
+        // --- 2. 启动进度条动画 ---
+        const bar = document.getElementById('loading-bar');
+        const screen = document.getElementById('loading-screen');
+
+        // 稍微延迟一帧以触发 CSS transition
+        setTimeout(() => {
+            bar.style.width = "100%";
+        }, 50);
+
+        // --- 3. 结束加载 ---
+        setTimeout(() => {
+            // 淡出
+            screen.classList.add('opacity-0');
+            
+            // 移除 DOM (防止遮挡点击)
+            setTimeout(() => {
+                screen.style.display = 'none';
+                // 可选：在这里播放一个"加载完成"的音效
+                // if(typeof playToggleOn === 'function') playToggleOn();
+            }, 500); // 等待淡出动画结束
+        }, loadingTime);
+    });
+    </script>
+    <!-- JS 逻辑文件 -->
+    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/satellite-view.js"></script>
+</body>
+</html>
