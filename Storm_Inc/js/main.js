@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 初始化流程 ---
     
     // 1. 先加载地图数据
-    d3.json("/js/world-f.json").then(data => {
+    d3.json("STORM_INC/js/world-f.json").then(data => {
         state.world = topojson.feature(data, data.objects.collection);
         
         // 2. 数据加载完，建立图层和投影
