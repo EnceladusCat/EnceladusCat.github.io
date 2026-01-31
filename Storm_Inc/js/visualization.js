@@ -3035,7 +3035,7 @@ export function renderProbabilitiesStyle(cyclone, timeIndex, worldData, threshol
     ctx.fillStyle = "rgba(0, 0, 0, 0.15)"; // 低透明度黑色
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
-    ctx.fillText("STROM_INC®", width - 20, height - 10);
+    ctx.fillText("STORM_INC®", width - 20, height - 10);
     drawProbabilityLegend(ctx, width, height, colors, thresholds);
 
     return canvas;
@@ -3565,7 +3565,7 @@ export function renderPhaseSpace(cyclone, globalTemp = 289) { // <--- [修改] �
     // 版权标
     ctx.textAlign = "right";
     ctx.fillStyle = "#cbd5e1";
-    ctx.fillText("STROM_INC® CPS", width - 10, height - 10);
+    ctx.fillText("STORM_INC®", width - 10, height - 10);
 
     return canvas;
 }
@@ -4281,7 +4281,7 @@ export function renderStationSynopticChart(cyclone, timeIndex, worldData, pressu
     ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
-    ctx.fillText("STROM_INC®", width - 20, height - 10);
+    ctx.fillText("STORM_INC®", width - 20, height - 10);
 
     return canvas;
 }
