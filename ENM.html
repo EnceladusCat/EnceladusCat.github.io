@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENM TC 强度分析工具 (兼容版)</title>
+    <!-- 使用更新的、支持新 Opset 的 ONNX Runtime 版本 -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+    <style>
+        /* --- 全手写兼容性 CSS --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            background-color: #111827;
+            color: #d1d5db;
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 672px; /* 42rem */
+            background-color: rgba(31, 41, 55, 0.5);
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 32px;
+            border: 1px solid #374151;
+        }
+        .text-center { text-align: center; }
+        h1 {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffffff;
+            margin: 0 0 8px 0;
+        }
+        p { margin: 0; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-gray-500 { color: #6b7281; }
+        .text-xs { font-size: 12px; }
+        .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .mt-1 { margin-top: 4px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .mt-6 { margin-top: 24px; }
+        .mb-6 { margin-bottom: 24px; }
+        
+        /* 上传区域 */
+        #image-drop-area {
+            position: relative;
+            width: 100%;
+            padding: 32px 0;
+            border: 2px dashed #4b5563;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #image-drop-area:hover, .drag-over {
+            border-color: #6366f1;
+            background-color: rgba(99, 102, 241, 0.1);
+        }
+        #image-upload {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 10; /* FIX: Ensure the input is on top of other elements */
+        }
+        #upload-prompt svg {
+            margin: 0 auto;
+            height: 48px;
+            width: 48px;
+            color: #6b7281;
+        }
+        #image-preview-container {
+            position: relative;
+            width: 128px;
+            height: 128px;
+            margin: 0 auto;
+        }
+        #preview-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+
+        /* 进度条 */
+        #model-progress-container {
+            width: 100%;
+            background-color: #374151;
+            border-radius: 9999px;
+            height: 10px;
+            margin: 16px 0;
+            overflow: hidden; /* 保证内部圆角 */
+        }
+        #model-progress-bar {
+            background-color: #4f46e5;
+            height: 10px;
+            border-radius: 9999px;
+            transition: width 0.3s;
+        }
+        
+        /* 结果区域 */
+        #diagnosis-results {
+            padding: 16px;
+            width: calc(100% - 32px); /* 减去padding */
+            min-height: 96px;
+            background-color: rgba(17, 24, 39, 0.5);
+            border-radius: 6px;
+            border: 1px solid #374151;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        /* 按钮 */
+        .btn-group {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap; /* 在小屏幕上换行 */
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none; /* for <a> tags */
+            color: white;
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        .btn:disabled {
+            background-color: #3730a3;
+            color: #a5b4fc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background-color: #374151;
+            padding: 12px;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .btn-secondary svg {
+            width: 24px;
+            height: 24px;
+        }
+        
+        .hidden { display: none !important; }
+
+        /* 弹窗 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background-color: #1f2937;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .modal h3 {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0 0 16px 0;
+            color: #ffffff;
+        }
+        .modal p, .modal li {
+            margin-bottom: 16px;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            font-size: 24px;
+            color: #9ca3af;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+        .modal-close:hover {
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="text-center mb-6">
+            <h1>ENM-AIIR 强度分析工具</h1>
+            <p class="text-gray-400">上传热带气旋/温带气旋红外（IR-BW）云图，获取 AI 强度评估参考。</p>
+            <p class="text-xs text-gray-500 mt-1">请确保上传的是IR-BW云图，且无杂项干扰。</p>
+        </div>
+
+        <div id="image-drop-area">
+            <input type="file" id="image-upload" multiple accept="image/*">
+            <div id="upload-prompt">
+                <svg stroke="currentColor" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-4-4 4.002 4.002 0 012.75-3.8A5.002 5.002 0 0117 8a5 5 0 01.1 9.9M12 11v6m-3-3l3 3 3-3" /></svg>
+                <p class="mt-2" style="font-size: 14px;"><span style="font-weight: 600; color: #a5b4fc;">点击上传</span>、拖拽文件或粘贴图片</p>
+                <p class="text-xs text-gray-500">支持多张图片批量分析</p>
+            </div>
+            <div id="image-preview-container" class="hidden">
+                <img id="preview-image" src="" alt="Image Preview">
+            </div>
+        </div>
+        
+        <div id="model-progress-container" class="hidden">
+            <div id="model-progress-bar" style="width: 0%"></div>
+        </div>
+        
+        <div id="diagnosis-results" class="mt-4 font-mono">请上传图片以开始...</div>
+
+        <div class="mt-6 btn-group">
+            <button id="run-diagnosis" disabled class="btn btn-primary">
+                <span id="run-btn-text">加载模型中...</span>
+            </button>
+            <button id="enm-help-btn" class="btn btn-secondary" title="使用说明">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.546-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </button>
+            <button id="error-info-btn" class="btn btn-secondary" title="误差说明">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </button>
+        </div>
+    </div>
+    
+    <div id="enm-help-overlay" class="modal-overlay hidden"></div>
+    <div id="enm-help-modal" class="modal hidden"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- API 后端地址 ---
+        // 部署后，请将此URL替换为你的Cloud Run服务的URL
+        var BACKEND_URL = 'https://enm-service-712102610138.us-central1.run.app/predict'; 
+        
+        // --- 全局变量 ---
+        var runDiagnosisBtn = document.getElementById('run-diagnosis');
+        var runBtnText = document.getElementById('run-btn-text');
+        var imageUploadInput = document.getElementById('image-upload');
+        var diagnosisResultsEl = document.getElementById('diagnosis-results');
+        var imageDropArea = document.getElementById('image-drop-area');
+        var uploadPrompt = document.getElementById('upload-prompt');
+        var imagePreviewContainer = document.getElementById('image-preview-container');
+        var previewImage = document.getElementById('preview-image');
+        var currentFiles = null;
+
+        // --- 模型加载状态模拟 ---
+        // 由于模型在后端，前端只需确认后端可用即可。
+        // 为简单起见，我们假设后端总是可用的。
+        runDiagnosisBtn.disabled = false;
+        runBtnText.textContent = '开始分析';
+        diagnosisResultsEl.textContent = '模型已在云端就绪。请上传图片进行分析。';
+
+        // --- 运行分析 (调用后端API) ---
+        function runAnalysis() {
+            var files = currentFiles;
+            if (!files || files.length === 0) {
+                diagnosisResultsEl.textContent = '请先选择一个或多个图像文件。';
+                return;
+            }
+            // 检查URL是否已配置
+            if (BACKEND_URL.includes('YOUR_CLOUD_RUN_SERVICE_URL')) {
+                alert('请先在JavaScript代码中设置您的Cloud Run服务URL！');
+                return;
+            }
+
+            runDiagnosisBtn.disabled = true;
+            runBtnText.textContent = '分析中...';
+            diagnosisResultsEl.textContent = '正在上传图片到云端服务器...';
+            
+            // 为每个文件创建一个API调用Promise
+            var analysisPromises = Array.prototype.map.call(files, function(file) {
+                var formData = new FormData();
+                formData.append('file', file);
+
+                // 使用fetch API发送文件到后端
+                return fetch(BACKEND_URL, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(response) {
+                    if (!response.ok) {
+                        // 如果服务器返回错误状态，则抛出错误
+                        return response.json().then(function(err) {
+                            throw new Error(err.error || '服务器响应错误');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(function(data) {
+                    if (data.error) {
+                        // 处理应用级错误
+                        return '❌ ' + data.fileName + ': ' + data.error;
+                    }
+                    return '✅ ' + data.fileName + ': ' + data.ci_value.toFixed(1) + ' KT';
+                })
+                .catch(function(e) {
+                    console.error('处理 ' + file.name + ' 时出错:', e);
+                    return '❌ ' + file.name + ': 分析失败 - ' + e.message;
+                });
+            });
+            
+            // 等待所有API调用完成
+            Promise.all(analysisPromises)
+                .then(function(resolvedResults) {
+                    diagnosisResultsEl.textContent = '分析结果:\n' + resolvedResults.join('\n');
+                    runDiagnosisBtn.disabled = false;
+                    runBtnText.textContent = '开始分析';
+                });
+        }
+
+        // --- 事件监听与 UI 控制 (这部分基本不变) ---
+        function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            currentFiles = files;
+            
+            uploadPrompt.classList.add('hidden');
+            imagePreviewContainer.classList.remove('hidden');
+            
+            if (previewImage.src) {
+                URL.revokeObjectURL(previewImage.src);
+            }
+            previewImage.src = URL.createObjectURL(files[0]);
+            
+            if (files.length > 1) {
+                diagnosisResultsEl.textContent = '已选择 ' + files.length + ' 张图片。准备好后请点击开始分析。';
+            } else {
+                diagnosisResultsEl.textContent = '已选择图片: ' + files[0].name + '。准备好后请点击开始分析。';
+            }
+        }
+
+        imageDropArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            imageDropArea.classList.add('drag-over');
+        });
+        imageDropArea.addEventListener('dragleave', function() {
+            imageDropArea.classList.remove('drag-over');
+        });
+        imageDropArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            imageDropArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+        imageUploadInput.addEventListener('change', function() { handleFiles(this.files); });
+        window.addEventListener('paste', function(e) {
+            if (e.clipboardData && e.clipboardData.files.length > 0) {
+                handleFiles(e.clipboardData.files);
+            }
+        });
+        runDiagnosisBtn.addEventListener('click', runAnalysis);
+        
+        // --- 弹窗逻辑 (完全不变) ---
+        var enmHelpBtn = document.getElementById('enm-help-btn');
+        var enmHelpModal = document.getElementById('enm-help-modal');
+        var enmHelpOverlay = document.getElementById('enm-help-overlay');
+        if (enmHelpBtn) {
+            var helpContent = 
+                '<button id="enm-help-close" class="modal-close">&times;</button>' +
+                '<h3>工具简介</h3>' +
+                '<p><strong>ENM TC Diagnosis</strong> 工具采用深度学习模型，旨在通过计算机视觉技术，对卫星云图进行量化、一致的特征分析，从而提供一个客观、自动化的强度评估参考。</p>' +
+                '<h3>使用说明</h3>' +
+                '<ol style="list-style-position: inside;">' +
+                    '<li><strong>上传图像</strong>：点击、拖拽或粘贴一张或多张热带气旋的<strong>红外（IR-BW）</strong>卫星云图。</li>' +
+                    '<li><strong>开始分析</strong>：点击“开始分析”按钮，图片将被上传至云端 AI 模型进行推理。</li>' +
+                    '<li><strong>查看结果</strong>：模型将根据云图特征计算出强度估值（单位：KT）。</li>' +
+                '</ol>' +
+                '<h3>注意事项 (Disclaimer)</h3>' +
+                '<ul style="list-style-position: inside;">' +
+                    '<li><strong>实验性项目</strong>：本工具为实验性项目，结果仅供参考，不应用于决策。</li>' +
+                    '<li><strong>数据源敏感性</strong>：模型主要使用 Digital Typhoon 卫星图像训练，其他来源的云图可能引入误差。</li>' +
+                    '<li><strong>单帧局限性</strong>：单帧分析可能存在波动，建议对连续3-6小时的结果取平均值。</li>' +
+                '</ul>';
+            enmHelpModal.innerHTML = helpContent;
+            
+            var openModal = function() {
+                enmHelpModal.classList.remove('hidden');
+                enmHelpOverlay.classList.remove('hidden');
+            };
+            var closeModal = function() {
+                enmHelpModal.classList.add('hidden');
+                enmHelpOverlay.classList.add('hidden');
+            };
+            
+            enmHelpBtn.addEventListener('click', openModal);
+            enmHelpModal.addEventListener('click', function(e) { if (e.target.id === 'enm-help-close') closeModal(); });
+            enmHelpOverlay.addEventListener('click', closeModal);
+        }
+        document.getElementById('error-info-btn').addEventListener('click', function() {
+            alert('ENM模型误差情况说明：\n\n1. 均方根误差 (RMSE): 约 8.7 KT。\n2. 90%误差范围：13KT；70%误差范围：9KT；50%误差范围：5KT。\n3. 主要误差来源：伪风眼、干区入侵、不对称云团等复杂情况。\n4. 建议: 为获得更稳定的结果，建议对连续3-6小时的分析结果取平均值。');
+        });
+    });
+    </script>
+</body>
+</html>
+
