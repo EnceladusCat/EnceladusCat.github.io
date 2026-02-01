@@ -206,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let state = {
         simulationInterval: null,
         isPaused: false,
+        showIntensityChart: true,
         hasAlerted: false,
         hasTriggeredCat1News: false,
         hasTriggeredCat5News: false,
@@ -369,7 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 初始化流程 ---
     
     // 1. 先加载地图数据
-    d3.json("js/world-f.json").then(data => {
+    d3.json("/js/world-f.json").then(data => {
         state.world = topojson.feature(data, data.objects.collection);
         
         // 2. 数据加载完，建立图层和投影
@@ -1201,7 +1202,9 @@ document.addEventListener('DOMContentLoaded', () => {
             drawFinalPath(mapSvg, mapProjection, state.cyclone, state.world, tooltip, state.siteName, state.siteLon, state.siteLat, state.showPathPoints, finalStats, basinId, state.pressureSystems, state.showWindField);
             requestRedraw();
             
-            forecastContainer.classList.remove('hidden');
+            if (state.showIntensityChart) {
+                forecastContainer.classList.remove('hidden');
+            }
             setTimeout(() => {
                 drawHistoricalIntensityChart(chartContainer, state.cyclone.track, tooltip);
             }, 0);
@@ -1724,7 +1727,9 @@ const cycloneNum = String(state.simulationCount).padStart(2, '0');
             bestTrackContainer.classList.add('hidden');
             
             drawFinalPath(mapSvg, mapProjection, selectedCyclone, state.world, tooltip, null, null, null, state.showPathPoints, null, basinSelector.value);
-            forecastContainer.classList.remove('hidden');
+            if (state.showIntensityChart) {
+                forecastContainer.classList.remove('hidden');
+            }
             drawHistoricalIntensityChart(chartContainer, selectedCyclone.track, tooltip);
 
             let peak = { intensity: 0 };
@@ -2425,6 +2430,191 @@ contentArea.innerHTML = `
                 alert("没有可保存的图像。");
             }
         };
+        let timelineBtn = document.getElementById('saveTimelineVideo');
+        if (!timelineBtn) {
+            timelineBtn = document.createElement('button');
+            timelineBtn.id = 'saveTimelineVideo';
+            // 样式与 Save Image 按钮保持一致，放在它左边
+            timelineBtn.className = "px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors flex items-center gap-2";
+            timelineBtn.innerHTML = '<i class="fa-solid fa-film"></i> SAVE TIMELINE';
+            
+            // 将按钮插入到 saveBtn 的父容器中，并放在 saveBtn 之前
+            if (saveBtn && saveBtn.parentNode) {
+                // 如果父容器是 flex，这会让它排在左边
+                saveBtn.parentNode.insertBefore(timelineBtn, saveBtn);
+            }
+        }
+
+        // 2. 绑定点击事件
+        timelineBtn.onclick = async () => {
+            // 仅支持 Graphic 和 Synoptic 模式
+            if (currentMode !== 'GRAPHIC' && currentMode !== 'SYNOPTIC') {
+                alert("Timeline video is only available for WARNING GRAPHIC and SYNOPTIC CHART tabs.");
+                return;
+            }
+
+            // A. 准备数据
+            const track = targetCyclone.track;
+            if (!track || track.length === 0) return;
+
+            // 筛选整点时刻 (00, 06, 12, 18Z)
+            // 假设每个点间隔 3 小时 (0, 3, 6, 9...)
+            // index % 2 === 0 即为 0, 6, 12... (对应索引 0, 2, 4...)
+            const timelineIndices = track.map((_, i) => i).filter(i => (i * 3) % 6 === 0);
+            
+            if (timelineIndices.length === 0) {
+                alert("Not enough track points for a timeline.");
+                return;
+            }
+
+            // B. 准备录制环境
+            const loadingBadge = document.createElement('div');
+            loadingBadge.className = "fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded shadow-xl z-[9999] font-bold animate-pulse flex items-center gap-2";
+            loadingBadge.innerHTML = '<i class="fa-solid fa-circle text-xs"></i> RECORDING TIMELINE...';
+            document.body.appendChild(loadingBadge);
+
+            timelineBtn.disabled = true;
+            timelineBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PROCESSING...';
+
+            try {
+                // 创建一个隐藏的画布用于录制
+                // 分辨率设为 1600x1200 (与 Synoptic Chart 一致) 或 1200x900
+                const recWidth = 1600;
+                const recHeight = 1200;
+                const canvas = document.createElement('canvas');
+                canvas.width = recWidth;
+                canvas.height = recHeight;
+                const ctx = canvas.getContext('2d');
+
+                // 设置背景色 (防止透明背景导致黑屏)
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, recWidth, recHeight);
+
+                // 创建 MediaRecorder 流
+                // 30fps，但在录制时我们通过控制"绘制间隔"来控制播放速度
+                const stream = canvas.captureStream(30); 
+                const recorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9',
+                    videoBitsPerSecond: 24000000
+                });
+
+                const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.start();
+
+                // C. 逐帧绘制并录制
+                // 我们希望视频里的播放速度是每帧约 0.5 秒 (2 FPS)
+                // 技巧：绘制一帧 -> 等待 500ms -> 绘制下一帧 -> 等待...
+                // 这样 MediaRecorder 录下来的就是慢速播放的视频
+                
+                for (let i = 0; i < timelineIndices.length; i++) {
+                    const idx = timelineIndices[i];
+                    const targetHour = idx * 3;
+                    
+                    // 更新进度提示
+                    loadingBadge.innerHTML = `<i class="fa-solid fa-circle text-xs"></i> RECORDING FRAME ${i+1}/${timelineIndices.length}`;
+
+                    let frameCanvas = null;
+
+                    if (currentMode === 'GRAPHIC') {
+                        // 渲染 Warning Graphic
+                        if (typeof renderJTWCStyle === 'function') {
+                            frameCanvas = renderJTWCStyle(targetCyclone, idx, state.world);
+                        }
+                    } else if (currentMode === 'SYNOPTIC') {
+                        // 渲染 Synoptic Chart (需要复杂的查表逻辑)
+                        const isHistoryMode = !!state.selectedHistoryCyclone;
+                        let historySystem = null;
+
+                        if (isHistoryMode) {
+                            const pressureHistory = state.selectedHistoryCyclone.pressureHistory || [];
+                            const found = pressureHistory.find(h => h.age === targetHour);
+                            // 模糊查找范围放大一点防止丢帧
+                            if (found) {
+                                historySystem = { lower: found.lower, upper: found.upper };
+                            } else if (pressureHistory.length > 0) {
+                                const closest = pressureHistory.reduce((prev, curr) => 
+                                    (Math.abs(curr.age - targetHour) < Math.abs(prev.age - targetHour) ? curr : prev)
+                                );
+                                if (Math.abs(closest.age - targetHour) <= 6) {
+                                    historySystem = { lower: closest.lower, upper: closest.upper };
+                                }
+                            }
+                        } else {
+                            // 实时模式查表
+                            if (state.pressureHistory) {
+                                const found = state.pressureHistory.find(h => h.age === targetHour);
+                                if (found) historySystem = { lower: found.lower, upper: found.upper };
+                            }
+                            if (!historySystem) historySystem = state.pressureSystems;
+                        }
+
+                        // 查找站点位置 (如果记录了)
+                        const sourceList = isHistoryMode ? (state.selectedHistoryCyclone.siteHistory || []) : state.siteHistory;
+                        const record = sourceList.find(h => h.hour === targetHour);
+                        const sLon = record ? record.lon : state.siteLon;
+                        const sLat = record ? record.lat : state.siteLat;
+                        const sName = state.siteName || "STATION";
+
+                        if (historySystem && typeof renderStationSynopticChart === 'function') {
+                            frameCanvas = renderStationSynopticChart(
+                                targetCyclone, 
+                                idx, 
+                                state.world, 
+                                historySystem,
+                                sLon, sLat, sName
+                            );
+                        }
+                    }
+
+                    // 将生成的帧绘制到录制画布上
+                    if (frameCanvas) {
+                        ctx.fillStyle = "white"; // 清除背景
+                        ctx.fillRect(0, 0, recWidth, recHeight);
+                        // 居中绘制 (保持比例)
+                        const scale = Math.min(recWidth / frameCanvas.width, recHeight / frameCanvas.height);
+                        const w = frameCanvas.width * scale;
+                        const h = frameCanvas.height * scale;
+                        const x = (recWidth - w) / 2;
+                        const y = (recHeight - h) / 2;
+                        ctx.drawImage(frameCanvas, x, y, w, h);
+                    }
+
+                    // **核心技巧**：等待 500ms，让 recorder "录制" 这一帧持续 0.5 秒
+                    // 这样生成的视频就会自动动起来
+                    await new Promise(r => setTimeout(r, 400)); 
+                }
+
+                // 结束录制
+                recorder.stop();
+                
+                // 等待生成 Blob
+                await new Promise(resolve => {
+                    recorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const name = (targetCyclone.name || "STORM").toUpperCase();
+                        a.download = `${name}_${currentMode}_TIMELINE.webm`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                });
+
+            } catch (err) {
+                console.error("Video generation failed:", err);
+                alert("Failed to generate video. Check console for details.");
+            } finally {
+                // 清理 UI
+                document.body.removeChild(loadingBadge);
+                timelineBtn.disabled = false;
+                timelineBtn.innerHTML = '<i class="fa-solid fa-film"></i> SAVE TIMELINE';
+            }
+        };
 
         showGraphic();
     });
@@ -2434,7 +2624,7 @@ contentArea.innerHTML = `
     if (catButton && newsModal) {
         catButton.addEventListener('click', () => {
             if (!state.cyclone || !state.cyclone.track || state.cyclone.track.length < 2) {
-                alert("需要先运行模拟生成路径。");
+                alert("no simulation found.");
                 return;
             }
 
@@ -2525,6 +2715,40 @@ contentArea.innerHTML = `
         if (event.code === 'Space') {
             event.preventDefault(); // 防止滚动页面
             togglePause();
+        }
+
+        if (event.code === 'KeyF') {
+            if (forecastContainer) {
+                // 1. 切换状态
+                state.showIntensityChart = !state.showIntensityChart;
+                
+                if (state.showIntensityChart) {
+                    // A. 显示容器
+                    forecastContainer.classList.remove('hidden');
+                    
+                    // B. [关键修复] 强制重绘图表
+                    // 必须加 setTimeout，让浏览器先移除 hidden 类并计算出容器宽度后，再执行 D3 绘图
+                    if (state.cyclone && state.cyclone.track && state.cyclone.track.length > 0) {
+                        setTimeout(() => {
+                            // 重新绘制，确保数据是最新的，且宽度计算正确
+                            // 传入当前的 chartMode ('kt' 或 'hpa') 和 basinSelector，保证单位正确
+                            drawHistoricalIntensityChart(
+                                chartContainer, 
+                                state.cyclone.track, 
+                                tooltip, 
+                                chartMode, 
+                                basinSelector.value
+                            );
+                        }, 10);
+                    }
+
+                } else {
+                    // C. 隐藏容器
+                    forecastContainer.classList.add('hidden');
+                }
+                
+                if (typeof playClick === 'function') playClick();
+            }
         }
 
         // S: 开始 / 重启 (相当于点击 Generate 按钮)

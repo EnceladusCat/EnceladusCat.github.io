@@ -63,6 +63,8 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
     // 2. 气旋自身的涡旋风场 (Vortex Flow)
     let u_vortex = 0;
     let v_vortex = 0;
+    let u_trans = 0;
+    let v_trans = 0;
 
     if (cyclone.status === 'active') {
         const dist = calculateDistance(lat, lon, cyclone.lat, cyclone.lon);
@@ -105,13 +107,26 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
 
             u_vortex = Math.cos(windAngle) * speedMs;
             v_vortex = Math.sin(windAngle) * speedMs;
+            const moveSpeed = cyclone.speed;
+            const moveAngleMath = (450 - cyclone.direction) % 360 * (Math.PI / 180);
+            const asymmetryFactor = 0.6;
+            u_trans = Math.cos(moveAngleMath) * moveSpeed * asymmetryFactor;
+            v_trans = Math.sin(moveAngleMath) * moveSpeed * asymmetryFactor;
+            let transDecay = 1.0;
+            if (dist > RMW) {
+                // 在 RMW 外开始衰减，直到 outerRadius 处归零
+                transDecay = Math.max(0, 1 - (dist - RMW) / (outerRadius - RMW));
+            }
+            
+            u_trans *= transDecay;
+            v_trans *= transDecay;
         }
     }
 
     return { 
-        u: envWind.u + u_vortex, 
-        v: envWind.v + v_vortex, 
-        magnitude: Math.hypot(envWind.u + u_vortex, envWind.v + v_vortex) 
+        u: envWind.u + u_vortex + u_trans, 
+        v: envWind.v + v_vortex + v_trans, 
+        magnitude: Math.hypot(envWind.u + u_vortex + u_trans, envWind.v + v_vortex + v_trans) 
     };
 }
 
@@ -265,7 +280,7 @@ export function initializePressureSystems(cyclone, month) {
         x: 150 + (Math.random() - 0.5) * 40, 
         y: 26 + (Math.random() - 0.5) * 8 + 14 * seasonalFactor,
         baseSigmaX: 25 + Math.random() * 30, sigmaX: 0, sigmaY: 10 + Math.random() * 15,
-        strength: 13 + Math.random() * 6, baseStrength: 13 + Math.random() * 6,
+        strength: 15 + Math.random() * 6, baseStrength: 15 + Math.random() * 6,
         velocityX: (Math.random() - 0.5) * 0.9, velocityY: (Math.random() - 0.5) * 0.3,
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.02 + Math.random() * 0.01, oscillationAmount: 0.2 + Math.random() * 0.5,
         noiseLayers: []
@@ -680,6 +695,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
         let weakeningFactor = 0.88 + updatedCyclone.circulationSize*0.0001*EXf - (terrainElevation / 1200); // [保留]
         const JPAdj = (updatedCyclone.lat >= 30 && updatedCyclone.lat <= 40 && updatedCyclone.lon >= 129 && updatedCyclone.lon <= 140) ? 0.03 : 0;
         updatedCyclone.intensity *= weakeningFactor + JPAdj;
+        updatedCyclone.circulationSize *= 1 + terrainElevation * 0.0008;
 
     } else if (isOverLand || isNearLand) {
         const JPAdjustment = (updatedCyclone.lat >= 30 && updatedCyclone.lat <= 40 && updatedCyclone.lon >= 129 && updatedCyclone.lon <= 140) ? 0.04 : 0;

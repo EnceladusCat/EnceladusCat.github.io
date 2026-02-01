@@ -2562,7 +2562,8 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
     ctx.fillStyle = "white";
     ctx.font = "bold 20px Arial";
     ctx.textAlign = "left";
-    ctx.fillText(`PROGNOSTIC REASONING: ${(cyclone.name || 'TD').toUpperCase()}`, 20, 32);
+    const reportNum = timeIndex + 1;
+    ctx.fillText(`PROGNOSTIC REASONING: ${(cyclone.name || 'TD').toUpperCase()} #${reportNum}`, 20, 32);
     ctx.textAlign = "right";
     ctx.fillText("INDEPENDENT CYCLONE WARNING CENTER", width - 20, 32);
 

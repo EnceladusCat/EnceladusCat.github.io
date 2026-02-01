@@ -6,7 +6,7 @@
     <title>STORM_INC 热带气旋模拟器</title>
     <meta name="keywords" content="Hurricane Simulator, Typhoon Simulator, Tropical Cyclone Simulator, Storm Tracking, Weather Simulation, STROM_INC, 台风模拟器, 气旋模拟, 飓风模拟, 气象游戏">
     <meta name="description" content="Experience realistic storm formation with STROM_INC. An advanced online Hurricane Simulator and Typhoon tracker. Create, track, and analyze tropical cyclones. ">
-    <meta name="google-site-verification" content="h020FH4VrOlNL2_OenQlLRxrAtNv9ez-OaxqkI-w8qQ" />
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/topojson-client@3"></script>
@@ -23,6 +23,7 @@
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
     <!-- [恢复] 用户指定的导航脚本 -->
+    <script src="nav.js" defer></script>
 
     <script>
         tailwind.config = {
@@ -429,7 +430,7 @@
 
         <!-- 顶部栏 -->
         <header class="flex justify-between items-start pointer-events-auto">
-            <div class="group relative left-6">
+            <div class="group relative left-24">
                 <h1 class="text-2xl md:text-4xl font-black tracking-tighter text-white drop-shadow-lg italic">
                     STORM<span class="text-cyan-500">_</span>INC <span class="text-[10px] md:text-xs font-mono font-normal tracking-[0.3em] text-slate-500 not-italic align-middle ml-2 group-hover:text-cyan-400 transition-colors">DYNAMICS ENGINE</span>
                 </h1>
@@ -438,7 +439,7 @@
 
             <!-- 设置按钮与语言切换 -->
             <div class="flex gap-2 relative">
-                <button id="catButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="About">
+                <button id="catButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="News">
                     <i class="fa-solid fa-hurricane"></i>
                 </button>
                 <button id="helpButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="Gameplay Guide">
@@ -527,7 +528,7 @@
                         
                         <label class="flex items-center gap-3 cursor-pointer group">
                             <input type="checkbox" id="irBwCheckbox" class="accent-cyan-500 w-4 h-4 bg-transparent border-slate-600 rounded-none">
-                            <span class="text-slate-400 text-[10px] uppercase tracking-widest group-hover:text-cyan-400 transition-colors" data-t="irbw">IR IMAGE</span>
+                            <span class="text-slate-400 text-[10px] uppercase tracking-widest group-hover:text-cyan-400 transition-colors" data-t="irbw">IR / Enhanced</span>
                         </label>
                     </div>
                 </div>
@@ -908,6 +909,8 @@
                                     <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">S</span><span class="text-white" data-t="key_s">Quick Restart</span></div>
                                     <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">V</span><span class="text-white" data-t="key_v">Hide/Show Panel</span></div>
                                     <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">1 / 2 / 3</span><span class="text-white">Speed Control</span></div>
+                                    <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">F</span><span class="text-white"
+                                        data-t="key_f">Show/Hide Intensity Profile</span></div>
                                     <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">R</span><span class="text-white" data-t="key_r">Show/Hide Post Radar (Base Reflectivity)</span></div>
                                     <div class="flex justify-between border-b border-white/5 pb-1"><span class="text-slate-500">D</span><span class="text-white" data-t="key_d">Show/Hide Post Radar (Radial Velocity)</span></div>
                                 </div>
@@ -1006,6 +1009,19 @@
                                     <span data-t="wind_p2">Helps identify when a wave organizes into a closed circulation (Depression stage).</span>
                                 </li>
                             </ul>
+                             <div class="mt-4 p-3 bg-red-500/10 rounded border border-red-500/20 relative overflow-hidden group">
+                                <i class="fa-solid fa-hurricane absolute -right-2 -bottom-2 text-4xl text-red-500/10 group-hover:text-red-500/20 transition-colors"></i>
+                                
+                                <div class="relative z-10">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="fa-solid fa-triangle-exclamation text-red-400 text-xs"></i>
+                                        <h4 class="text-xs font-bold text-red-400 uppercase tracking-wider" data-t="wind_danger_title">The Dangerous Semicircle</h4>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 leading-relaxed font-mono" data-t="wind_danger_desc">
+                                        In the Northern Hemisphere, the right side of a moving cyclone has the strongest winds. This is where the rotational wind speed adds to the storm's forward motion speed (V_rot + V_motion).
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         <div id="tab-forecast" class="tab-content hidden space-y-6">
@@ -1325,7 +1341,7 @@
                     'obs_post': 'Observation Post',
                     'force_spawn': 'Force Spawn',
                     'track_nodes': 'Show Track Nodes',
-                    'irbw': 'IR Image',
+                    'irbw': 'IR / Enhanced',
                     'track_select': 'SELECT TRACK',
                     'sat_feed': 'SAT_FEED_LIVE',
                     'await_init': 'Awaiting Initialization...',
@@ -1360,6 +1376,7 @@
                     'key_space': 'Pause / Resume',
                     'key_s': 'Quick Restart',
                     'key_v': 'Hide / Show Panel',
+                    'key_f': 'Show/Hide Intensity Profile',
                     'key_r': 'Post Radar (Base Reflectivity)',
                     'key_d': 'Post Radar (Radial Velocity)',
                     
@@ -1387,6 +1404,8 @@
                     'detail_wind_desc': 'High-resolution vector field showing surface circulation.',
                     'wind_p1': 'Visualizes inflow and convergence.',
                     'wind_p2': 'Identifies closed circulation (LLCC).',
+                    'wind_danger_title': 'THE DANGEROUS SEMICIRCLE',
+                    'wind_danger_desc': 'In the Northern Hemisphere, the right-front quadrant is strongest because the rotation vector aligns with the forward motion vector (V_rot + V_motion). Conversely, they oppose each other in the left "Navigable Semicircle".',
                     
                     'detail_fcst_title': 'Forecast Track',
                     'detail_fcst_desc': 'Projected path based on current steering flows and beta-drift.',
@@ -1425,7 +1444,7 @@
                     'obs_post': '观测站点',
                     'force_spawn': '强制生成',
                     'track_nodes': '显示路径节点',
-                    'irbw': 'IR图像',
+                    'irbw': 'IR/增强',
                     'track_select': '选择曲目',
                     'sat_feed': '卫星实时回传',
                     'await_init': '等待启动...',
@@ -1460,6 +1479,7 @@
                     'key_space': '暂停 / 继续',
                     'key_s': '快速重启',
                     'key_v': '隐藏 / 显示面板',
+                    'key_f': '隐藏 / 显示强度曲线',
                     'key_r': '显示 / 隐藏站点雷达（基础反射率）',
                     'key_d': '显示 / 隐藏站点雷达（多普勒径向速度）',
                     
@@ -1487,6 +1507,8 @@
                     'detail_wind_desc': '高分辨率矢量场，显示近地面的实际空气流动。',
                     'wind_p1': '可视化气流的流入角度与辐合情况。',
                     'wind_p2': '用于识别波动何时构建出闭合环流 (LLCC)。',
+                    'wind_danger_title': '危险半圆 (Dangerous Semicircle)',
+                    'wind_danger_desc': '在北半球，气旋右前象限的风速最强（航海中称为危险半圆）。这是因为气旋的逆时针旋转速度与向前的移动速度在该区域方向一致，发生矢量叠加 (V_rot + V_motion)。',
                     
                     'detail_fcst_title': '路径预测模型',
                     'detail_fcst_desc': '基于当前引导气流和 Beta 漂移效应实时计算的预计轨迹。点击任意历史路径点查看当时的路径预测，并生成警告地图！',
