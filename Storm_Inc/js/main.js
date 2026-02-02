@@ -8,7 +8,7 @@ import { getCategory, knotsToKph, knotsToMph, windToPressure, directionToCompass
 import { RadarRenderer, calculateRadarDbz, getShaderWindVector } from './radar-system.js';
 import { DopplerRenderer } from './radar-doppler.js';
 // [新增] 导入卫星云图模块
-import { initSatelliteView, updateSatelliteView, resetSatelliteParams, setSatelliteGrayscale } from './satellite-view.js';
+import { initSatelliteView, updateSatelliteView, resetSatelliteParams, setSatelliteGrayscale, getSatelliteSnapshot } from './satellite-view.js';
 import { initTerrainSystem, getElevationAt, getLandStatus } from './terrain-data.js';
 import { initializeCyclone, initializePressureSystems, updatePressureSystems, updateFrontalZone, updateCycloneState, getWindVectorAt } from './cyclone-model.js';
 import { generatePathForecasts } from './forecast-models.js';
@@ -972,6 +972,28 @@ document.addEventListener('DOMContentLoaded', () => {
             currentSST,
             effectiveHumidity // <--- 使用加权后的湿度
         );
+        
+        if (state.cyclone.age % 6 === 0) {
+            // 给 GPU 一点时间完成渲染 (虽然 snapshot() 会强制 render，但微任务队列更稳妥)
+            // 由于这是在循环中，我们直接同步调用即可，WebGL 是同步提交指令的
+            
+            const snapshotData = getSatelliteSnapshot();
+            
+            if (snapshotData) {
+                // 初始化存储数组
+                if (!state.cyclone.satelliteCache) state.cyclone.satelliteCache = [];
+                
+                // 避免重复存储 (如果暂停/继续可能导致重复)
+                const existingEntry = state.cyclone.satelliteCache.find(s => s.age === state.cyclone.age);
+                if (!existingEntry) {
+                    state.cyclone.satelliteCache.push({
+                        age: state.cyclone.age,
+                        img: snapshotData, // Base64 字符串
+                        timestamp: Date.now() // 可选：记录真实生成时间
+                    });
+                }
+            }
+        }
     }
 
     function updateMapInfoBox() {
@@ -2055,6 +2077,10 @@ const cycloneNum = String(state.simulationCount).padStart(2, '0');
                         WIND PROB 64KT
                     </button>
 
+                    <button id="jtwc-tab-satellite" class="text-left px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded transition-colors">
+                    SAT IMAGERY
+                    </button>
+
                     <button id="jtwc-tab-phase" class="text-left px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded transition-colors">
                         PHASE SPACE
                     </button>
@@ -2080,7 +2106,8 @@ const cycloneNum = String(state.simulationCount).padStart(2, '0');
         const contentArea = document.getElementById('jtwc-content-area');
         const tabGraphic = document.getElementById('jtwc-tab-graphic');
         const tabProb34 = document.getElementById('jtwc-tab-prob34');
-        const tabProb64 = document.getElementById('jtwc-tab-prob64'); // 新增
+        const tabProb64 = document.getElementById('jtwc-tab-prob64');
+        const tabSatellite = document.getElementById('jtwc-tab-satellite');
         const tabStation = document.getElementById('jtwc-tab-station');
         const tabSynoptic = document.getElementById('jtwc-tab-synoptic');
         const loadingNode = document.getElementById('jtwc-loading');
@@ -2095,7 +2122,7 @@ const cycloneNum = String(state.simulationCount).padStart(2, '0');
         };
 
         const updateTabStyles = (activeTab) => {
-            [tabGraphic, tabProb34, tabProb64, tabStation, tabPhase, tabSynoptic].forEach(tab => {
+            [tabGraphic, tabProb34, tabProb64, tabSatellite, tabPhase, tabStation, tabSynoptic].forEach(tab => {
                 if (tab === activeTab) {
                     tab.className = "text-left px-3 py-2 text-sm font-bold bg-white border border-gray-300 rounded shadow-sm text-cyan-700 transition-all";
                 } else {
@@ -2164,6 +2191,91 @@ const cycloneNum = String(state.simulationCount).padStart(2, '0');
 
         const tabPhase = document.getElementById('jtwc-tab-phase');
         tabPhase.onclick = showPhaseSpace;
+
+        const showSatelliteImagery = () => {
+            updateTabStyles(tabSatellite);
+            currentMode = 'SATELLITE';
+            currentCanvas = null;
+            contentArea.innerHTML = ''; // 清空区域
+
+            // 1. 确定目标气旋和时间
+            const targetPoint = targetCyclone.track[renderIndex];
+            const targetAge = renderIndex * 3; // 假设每步3小时
+        
+            // 2. 在缓存中查找图片
+            // 我们需要找到最接近 targetAge 的快照 (因为快照是每6小时存一张，而时间轴可能是每3小时)
+            const cache = targetCyclone.satelliteCache || [];
+        
+            // 查找精确匹配或最近的匹配 (向后查找最近的过去图像)
+            // 例如：如果是 T+9，我们显示 T+6 的图；如果是 T+12，显示 T+12 的图。
+            let bestShot = cache.find(s => s.age === targetAge);
+        
+            if (!bestShot && cache.length > 0) {
+                // 如果没有精确匹配，找最近的一个 (Fallback)
+                bestShot = cache.reduce((prev, curr) => {
+                    return (Math.abs(curr.age - targetAge) < Math.abs(prev.age - targetAge) ? curr : prev);
+                });
+            }
+
+           // 3. 渲染 UI
+            const container = document.createElement('div');
+            container.className = "w-full h-full flex flex-col items-center justify-center bg-[#1a1a1a] relative";
+
+            if (bestShot) {
+                // A. 显示图片
+                const img = document.createElement('img');
+                img.src = bestShot.img;
+                img.className = "w-full h-full shadow-lg border border-gray-800 object-contain";
+                container.appendChild(img);
+
+                // B. 显示信息水印 (HTML覆盖层)
+                const infoOverlay = document.createElement('div');
+                infoOverlay.className = "absolute top-4 left-4 text-white/80 font-mono text-xs bg-black/50 p-2 rounded pointer-events-none";
+            
+                // 格式化时间戳
+                const year = new Date().getFullYear();
+                const month = (targetCyclone.currentMonth || 8) - 1;
+                const d = new Date(Date.UTC(year, month, 1));
+                d.setUTCHours(d.getUTCHours() + bestShot.age);
+                const timeStr = `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCHours()).padStart(2,'0')}Z`;
+            
+                // 查找那一刻的强度 (用于显示)
+                const trackData = targetCyclone.track.find((_, i) => i * 3 === bestShot.age) || targetPoint;
+                const intensity = trackData ? trackData[2] : 0;
+
+                let nameDisplay = "UNKNOWN";
+                if (targetCyclone.name) {
+                    nameDisplay = targetCyclone.name.toUpperCase();
+                } else {
+                    // 如果没有名字，尝试显示编号
+                    // 注意：如果是正在进行的模拟，用 state.simulationCount
+                    // 如果是历史记录，这可能不准确，但在没有存储 ID 的情况下这是最佳回退
+                    const num = String(state.simulationCount).padStart(2, '0');
+                    nameDisplay = `TD ${num}`;
+                }
+
+                infoOverlay.innerHTML = `
+                    <div class="font-bold text-lg text-cyan-400">SATELLITE SNAPSHOT OF ${nameDisplay}</div>
+                    <div>VALID: ${timeStr} (T+${bestShot.age}H)</div>
+                    <div>INTENSITY: ${Math.round(intensity/5)*5} KT</div>
+                    ${bestShot.age !== targetAge ? `<div class="text-yellow-400 mt-1">Note: Showing nearest img (Req: T+${targetAge}H)</div>` : ''}
+                `;
+                container.appendChild(infoOverlay);
+
+            } else {
+               // C. 没有图片的空状态
+                container.innerHTML = `
+                    <div class="text-center text-slate-500">
+                        <i class="fa-solid fa-satellite-dish text-6xl mb-4 opacity-50"></i>
+                        <p class="text-xl font-bold">NO IMAGERY AVAILABLE</p>
+                        <p class="text-sm mt-2">Simulation hasn't generated satellite cache for T+${targetAge}H yet.</p>
+                        <p class="text-xs text-slate-600 mt-1">Images are captured every 6 hours during simulation run.</p>
+                    </div>
+                `;
+            }
+
+            contentArea.appendChild(container);
+        };
 
         const showSynopticChart = () => {
             updateTabStyles(tabSynoptic);
@@ -2483,10 +2595,29 @@ contentArea.innerHTML = `
         tabGraphic.onclick = showGraphic;
         tabProb34.onclick = () => showProb(34);
         tabProb64.onclick = () => showProb(64);
+        tabSatellite.onclick = showSatelliteImagery;
         tabStation.onclick = showStationData;
 
         const saveBtn = document.getElementById('saveJtwcImage');
         saveBtn.onclick = () => {
+
+            if (currentMode === 'SATELLITE') {
+                const name = targetCyclone.name || 'STORM';
+                const timeTag = `T${renderIndex * 3}`;
+                const imgElement = contentArea.querySelector('img');
+                if (imgElement && imgElement.src) {
+                    const link = document.createElement('a');
+                    link.download = `SAT_${name}_${timeTag}.png`;
+                    link.href = imgElement.src; // 直接获取 Base64 数据
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    alert("No image to save!");
+                }
+                return; // 结束执行
+            }
+
             if (currentCanvas) {
                 const link = document.createElement('a');
                 const name = targetCyclone.name || 'STORM';
@@ -2495,7 +2626,7 @@ contentArea.innerHTML = `
                 link.href = currentCanvas.toDataURL();
                 link.click();
             } else {
-                alert("没有可保存的图像。");
+                alert("No image to save!");
             }
         };
         let timelineBtn = document.getElementById('saveTimelineVideo');

@@ -261,7 +261,7 @@ function drawWindRadii(container, pathGenerator, cyclone, pressureSystems, isPau
     const STEP_KM = 15;         // 射线步长
     const MAX_SEARCH_KM = 900;
     const SMOOTH_FACTOR = 0.5;
-    const RMW_KM = 5 + cyclone.circulationSize * 0.15;
+    const RMW_KM = 5 + cyclone.circulationSize * 0.125;
     if (!cyclone.radiiState) {
         cyclone.radiiState = {};
     }
@@ -1955,9 +1955,9 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
 
     // B. 经纬网
     ctx.beginPath();
-    ctx.strokeStyle = "#444444";
+    ctx.strokeStyle = "#888888";
     ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
+    ctx.setLineDash([]);
     const graticule = d3.geoGraticule().step([2, 2]);
     pathGenerator(graticule());
     ctx.stroke();
@@ -2004,7 +2004,7 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
 
     ctx.save();
     ctx.fillStyle = "black";
-    ctx.font = "bold 9px Arial"; // JTWC 风格通常字号较小且清晰
+    ctx.font = "bold 11px Arial"; // JTWC 风格通常字号较小且清晰
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
 
@@ -2066,7 +2066,8 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
         let lastStepData = null;
         const boundaryPoints = []; 
         const rawSteps = [];
-        const meanTrack = []; // 用于收集中心线
+        const meanTrack = [];
+        let maxRadiusSoFar = 0.02;
 
         for (let i = 0; i <= quantizedLimit; i++) {
             const pointsAtStep = [];
@@ -2088,10 +2089,15 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
                 return Math.sqrt(dx*dx + dy*dy);
             }) || 0;
 
-            const jitter = Math.sin(i * 132.19 + snapAge) * 0.1; 
+            const jitter = Math.sin(i * 132.19 + snapAge) * 0.0; 
             const breathing = Math.cos(i * 0.5) * 0.03;
             let radiusDeg = Math.max(0.02, (0.02 + i * 0.14) + (stdDev * 1.5) + (jitter + breathing) * (1 + i * 0.05));
-rawSteps.push({
+            if (radiusDeg < maxRadiusSoFar) {
+                radiusDeg = maxRadiusSoFar;
+            } else {
+                maxRadiusSoFar = radiusDeg;
+            }
+            rawSteps.push({
                 lon: avgLon,
                 lat: avgLat,
                 r: radiusDeg,
@@ -2157,21 +2163,55 @@ rawSteps.push({
         }
 
         // --- 2. 定义通用路径函数 ---
-        // 这个函数会在主画布(Stroke)和离屏画布(Fill)上重复使用，确保形状完全一致
         const drawConePath = (context) => {
             if (boundaryPoints.length < 2) return;
+            
             context.beginPath();
+
+            // A. 左边缘 (Left Edge) - 平滑曲线
             context.moveTo(boundaryPoints[0].left[0], boundaryPoints[0].left[1]);
-            for (let i = 1; i < boundaryPoints.length; i++) {
-                context.lineTo(boundaryPoints[i].left[0], boundaryPoints[i].left[1]);
+            for (let i = 0; i < boundaryPoints.length - 1; i++) {
+                const p0 = boundaryPoints[i].left;
+                const p1 = boundaryPoints[i+1].left;
+                // 取两点中点作为控制终点
+                const midX = (p0[0] + p1[0]) / 2;
+                const midY = (p0[1] + p1[1]) / 2;
+                // 使用中点近似法绘制平滑曲线 (Catmull-Rom 简化版)
+                // 这里简单地连接两点，如需极致平滑可用 quadraticCurveTo
+                // 鉴于我们已经平滑了数据源，这里用 lineTo 配合平滑数据其实已经足够好
+                // 但为了更圆润，我们使用中点插值：
+                if (i === 0) {
+                     context.lineTo(midX, midY); 
+                } else {
+                     context.quadraticCurveTo(p0[0], p0[1], midX, midY);
+                }
             }
-            const lastBP = boundaryPoints[boundaryPoints.length - 1];
+            // 连接到最后一个点的左侧
+            const lastIdx = boundaryPoints.length - 1;
+            context.lineTo(boundaryPoints[lastIdx].left[0], boundaryPoints[lastIdx].left[1]);
+
+            // B. 顶部圆弧 (Top Arc)
+            const lastBP = boundaryPoints[lastIdx];
             const startAngle = Math.atan2(lastBP.left[1] - lastBP.center[1], lastBP.left[0] - lastBP.center[0]);
             const endAngle = Math.atan2(lastBP.right[1] - lastBP.center[1], lastBP.right[0] - lastBP.center[0]);
             context.arc(lastBP.center[0], lastBP.center[1], lastBP.radius, startAngle, endAngle, false);
+
+            // C. 右边缘 (Right Edge) - 从尾到头
             for (let i = boundaryPoints.length - 2; i >= 0; i--) {
-                context.lineTo(boundaryPoints[i].right[0], boundaryPoints[i].right[1]);
+                const p0 = boundaryPoints[i+1].right; // 上一点 (其实是列表里的后一点)
+                const p1 = boundaryPoints[i].right;   // 当前点
+                const midX = (p0[0] + p1[0]) / 2;
+                const midY = (p0[1] + p1[1]) / 2;
+                
+                if (i === boundaryPoints.length - 2) {
+                    context.lineTo(midX, midY);
+                } else {
+                    context.quadraticCurveTo(p0[0], p0[1], midX, midY);
+                }
             }
+            // 闭合到起点右侧
+            context.lineTo(boundaryPoints[0].right[0], boundaryPoints[0].right[1]);
+            
             context.closePath();
         };
 

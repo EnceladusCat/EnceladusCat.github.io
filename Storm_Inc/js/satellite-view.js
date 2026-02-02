@@ -231,7 +231,7 @@ export function initSatelliteView(canvasId) {
     canvas = document.getElementById(canvasId);
     if (!canvas) return;
     
-    gl = canvas.getContext('webgl');
+    gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
     if (!gl) return;
 
     const vShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
@@ -440,4 +440,14 @@ function render() {
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     requestAnimationFrame(render);
+}
+
+export function getSatelliteSnapshot() {
+    if (!gl || !canvas || !program) return null;
+
+    // 1. 强制渲染一帧，确保画面是最新的
+    render(); 
+    
+    // 2. 导出图片数据
+    return canvas.toDataURL('image/png');
 }

@@ -79,7 +79,7 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
 
     if (cyclone.status === 'active') {
         const dist = calculateDistance(lat, lon, cyclone.lat, cyclone.lon);
-        const RMW = 5 + cyclone.circulationSize * 0.15;
+        const RMW = 5 + cyclone.circulationSize * 0.125;
         const outerRadius = cyclone.circulationSize * 4.0; 
 
         if (dist < outerRadius) {
@@ -89,7 +89,7 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
             if (dist < RMW) {
                 vortexSpeed = maxWind * (dist / RMW);
             } else {
-                const decayExponent = 0.88 - cyclone.circulationSize * 0.0002;
+                const decayExponent = 0.80 - cyclone.circulationSize * 0.0002;
                 const rawSpeed = maxWind * Math.pow(RMW / dist, decayExponent);
                 
                 // 平滑衰减
