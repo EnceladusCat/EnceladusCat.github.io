@@ -1978,6 +1978,7 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
         { name: "MANILA", lon: 120.98, lat: 14.6 },
         { name: "TAIPEI", lon: 121.5, lat: 25.05 },
         { name: "HONG KONG", lon: 114.17, lat: 22.3 },
+        { name: "YAP", lat: 9.51, lon: 138.12 },
         { name: "SHANGHAI", lon: 121.47, lat: 31.23 },
         { name: "SEOUL", lon: 126.98, lat: 37.56 },
         { name: "TOKYO", lon: 139.69, lat: 35.69 },
@@ -1985,10 +1986,12 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
         { name: "NAHA", lon: 127.68, lat: 26.21 }, // 冲绳
         { name: "GUAM", lon: 144.7, lat: 13.4 },   // 关岛
         { name: "IWO TO", lon: 141.3, lat: 24.8 }, // 硫磺岛
+        { name: "DHAKA", lon: 90.39, lat: 23.73 },
 
         // 北美/中太
         { name: "HONOLULU", lon: -157.86, lat: 21.31 },
         { name: "LOS ANGELES", lon: -118.24, lat: 34.05 },
+        { name: "HAVANA", lon: -82.35, lat: 23.13 },
         { name: "NEW YORK", lon: -74.00, lat: 40.71 },
         { name: "HOUSTON", lon: -95.37, lat: 29.76 },
         { name: "SAN FRANCISCO", lon: -122.42, lat: 37.77 },
@@ -2737,6 +2740,16 @@ rawSteps.push({
         { name: "SHANGHAI", lat: 31.23, lon: 121.47 },
         { name: "SEOUL", lat: 37.56, lon: 126.97 },
         { name: "HANOI", lat: 21.02, lon: 105.83 },
+        { name: "HONOLULU", lon: -157.86, lat: 21.31 },
+        { name: "HAVANA", lon: -82.35, lat: 23.13 },
+        { name: "LOS ANGELES", lon: -118.24, lat: 34.05 },
+        { name: "NEW YORK", lon: -74.00, lat: 40.71 },
+        { name: "HOUSTON", lon: -95.37, lat: 29.76 },
+        { name: "SAN FRANCISCO", lon: -122.42, lat: 37.77 },
+        { name: "BRISBANE", lon: 153.02, lat: -27.47 },
+        { name: "DARWIN", lon: 130.84, lat: -12.46 },
+        { name: "CAIRNS", lon: 145.77, lat: -16.92 },
+        { name: "DHAKA", lon: 90.39, lat: 23.73 },
         { name: "HO CHI MINH", lat: 10.82, lon: 106.63 }
     ];
 
