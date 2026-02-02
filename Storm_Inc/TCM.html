@@ -23,7 +23,6 @@
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
     <!-- [恢复] 用户指定的导航脚本 -->
-    <script src="nav.js" defer></script>
 
     <script>
         tailwind.config = {
@@ -1580,7 +1579,7 @@
                     siteNameInput.placeholder = currentLang === 'EN' ? "SITE CALLSIGN" : "站点呼号";
                 }
                 
-                langButton.textContent = currentLang === 'EN' ? "EN" : "CN";
+                langButton.textContent = currentLang === 'EN' ? "EN" : "EN";
                 localStorage.setItem('userLanguage', currentLang); // [修复] 使用正确的变量名 currentLang
             }
 
