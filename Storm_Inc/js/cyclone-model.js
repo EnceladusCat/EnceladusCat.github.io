@@ -55,9 +55,20 @@ function calculateLayerWind(lon, lat, systems) {
 // [修改] 获取指定位置的风矢量 (用于流线可视化和观测站)
 // 现在主要返回 "低层风场" (Surface/850hPa)，因为这是观测和人感受到的风
 export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
-    
+    let k = 1.0;
+    let alphaDeg = 15;
+    const landInfo = getLandStatus(lon, lat);
+    const isLand = landInfo ? landInfo.isLand : false;
+    if (isLand) {
+        const elevation = getElevationAt(lon, lat) || 0;
+        k = Math.max(0.4, 0.8 - (elevation / 1700));
+        alphaDeg = Math.min(55, 15 + (elevation / 17));
+    }
+
+    // 转换为弧度
+    const inflowAngle = alphaDeg * (Math.PI / 180);
+
     // 1. 获取低层背景风 (Environmental Flow)
-    // 传入 pressureSystems.lower
     const envWind = calculateLayerWind(lon, lat, pressureSystems.lower);
     
     // 2. 气旋自身的涡旋风场 (Vortex Flow)
@@ -78,7 +89,7 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
             if (dist < RMW) {
                 vortexSpeed = maxWind * (dist / RMW);
             } else {
-                const decayExponent = 0.84 - cyclone.circulationSize * 0.0002;
+                const decayExponent = 0.88 - cyclone.circulationSize * 0.0002;
                 const rawSpeed = maxWind * Math.pow(RMW / dist, decayExponent);
                 
                 // 平滑衰减
@@ -97,8 +108,6 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
             const angleToCenter = Math.atan2(dy, dx);
             
             // [新增] 摩擦辐合角 (Inflow Angle)
-            // 低层风不会完全平行于等压线，会有 15-20 度的流入角
-            const inflowAngle = 20 * (Math.PI / 180); 
             const rotationOffset = (cyclone.lat >= 0) ? (Math.PI / 2 + inflowAngle) : (-Math.PI / 2 - inflowAngle);
             const windAngle = angleToCenter + rotationOffset;
 
@@ -124,9 +133,9 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
     }
 
     return { 
-        u: envWind.u + u_vortex + u_trans, 
-        v: envWind.v + v_vortex + v_trans, 
-        magnitude: Math.hypot(envWind.u + u_vortex + u_trans, envWind.v + v_vortex + v_trans) 
+        u: envWind.u + u_vortex * k + u_trans, 
+        v: envWind.v + v_vortex * k + v_trans, 
+        magnitude: Math.hypot(envWind.u + u_vortex * k + u_trans, envWind.v + v_vortex * k + v_trans) 
     };
 }
 
@@ -255,7 +264,7 @@ export function initializePressureSystems(cyclone, month) {
     // 1. 赤道低气压带
     tempAllSystems.push({
         type: 'high', // 标记类型以便分层
-        x: 140, y: 2 + (Math.random() - 0.5) * 5, 
+        x: 140, y: 1 + (Math.random() - 0.5) * 5, 
         baseSigmaX: 300, sigmaX: 300, sigmaY: 10 + Math.random() * 4, 
         strength: -(10 + Math.random() * 3), baseStrength: -(10 + Math.random() * 3),
         velocityX: (Math.random() - 0.5) * 0.1, velocityY: (Math.random() - 0.5) * 0.1,
@@ -277,7 +286,7 @@ export function initializePressureSystems(cyclone, month) {
     // (A) 西太副高
     tempAllSystems.push({
         type: 'high',
-        x: 150 + (Math.random() - 0.5) * 40, 
+        x: 150 + (Math.random() - 0.5) * 50, 
         y: 26 + (Math.random() - 0.5) * 8 + 14 * seasonalFactor,
         baseSigmaX: 25 + Math.random() * 30, sigmaX: 0, sigmaY: 10 + Math.random() * 15,
         strength: 15 + Math.random() * 6, baseStrength: 15 + Math.random() * 6,
@@ -291,7 +300,7 @@ export function initializePressureSystems(cyclone, month) {
         x: 115 + (Math.random() - 0.5) * 50, 
         y: 23 + (Math.random() - 0.5) * 10 + 14 * seasonalFactor,
         baseSigmaX: 30 + Math.random() * 25, sigmaX: 0, sigmaY: 5 + Math.random() * 25,
-        strength: 2 + Math.random() * 17, baseStrength: 2 + Math.random() * 17,
+        strength: 8 + Math.random() * 11, baseStrength: 8 + Math.random() * 11,
         velocityX: (Math.random() - 0.5) * 1.5, velocityY: (Math.random() - 0.5) * 1.6,
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.025 + Math.random() * 0.05, oscillationAmount: 0.25 + Math.random() * 0.3,
         noiseLayers: []
@@ -664,8 +673,8 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     updatedCyclone.speed += (steeringSpeedKnots - updatedCyclone.speed) * (0.3 + Math.max(0, updatedCyclone.lat / 100));
 
     // 冷尾流
-    if (updatedCyclone.speed < 5) {
-        const coolingRate = (5 - updatedCyclone.speed) / 5 * 0.25; 
+    if (updatedCyclone.speed < 6) {
+        const coolingRate = (6 - updatedCyclone.speed) / 6 * 0.25; 
         updatedCyclone.upwellingCoolingEffect = Math.min(updatedCyclone.upwellingCoolingEffect + coolingRate, 5.0); 
     } else {
         updatedCyclone.upwellingCoolingEffect = Math.max(updatedCyclone.upwellingCoolingEffect - 0.2, 0); 
@@ -700,7 +709,8 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     } else if (isOverLand || isNearLand) {
         const JPAdjustment = (updatedCyclone.lat >= 30 && updatedCyclone.lat <= 40 && updatedCyclone.lon >= 129 && updatedCyclone.lon <= 140) ? 0.04 : 0;
         const PHAdjustment = (updatedCyclone.lat >= 5 && updatedCyclone.lat <= 18 && updatedCyclone.lon >= 120 && updatedCyclone.lon <= 127 && updatedCyclone.intensity < 85) ? 0.05 : 0;
-        updatedCyclone.intensity *= 0.88 + updatedCyclone.circulationSize*0.0001*EXf + JPAdjustment + PHAdjustment; // [保留]
+        const AUAdjustment = (updatedCyclone.lat >= -18 && updatedCyclone.lat <= -10 && updatedCyclone.lon >= 123 && updatedCyclone.lon <= 137) ? 0.05 : 0;
+        updatedCyclone.intensity *= 0.88 + updatedCyclone.circulationSize*0.0001*EXf + JPAdjustment + PHAdjustment + AUAdjustment; // [保留]
         updatedCyclone.speed *= 0.99;
 
     } else if (updatedCyclone.isExtratropical) {

@@ -436,20 +436,6 @@ function checkLandFast(lon, lat) {
     return landGrid[y * landGridWidth + x] === 1;
 }
 
-function getSurfaceCorrection(lon, lat, elevation) {
-    let k = 0.8;      // 默认风速保持率 (海面)
-    let alpha = 15;   // 默认流入角 (海面)
-
-    if (elevation > 0) {
-        // 陆地基础修正：海拔越高，粗糙度通常越大，摩擦增强
-        // 这里的逻辑模拟了高山对气流的剧烈削弱
-        k = Math.max(0.4, 0.8 - (elevation / 1700)); 
-        alpha = Math.min(55, 15 + (elevation / 17)); 
-    }
-    
-    return { k, alpha };
-}
-
 export function drawWindField(mapSvg, mapProjection, cyclone, pressureSystems, world) {
     const currentMonth = cyclone.currentMonth || 6;
     const { width, height } = mapSvg.node().getBoundingClientRect();
@@ -518,24 +504,6 @@ export function drawWindField(mapSvg, mapProjection, cyclone, pressureSystems, w
 
             // 物理计算
             let vec = getWindVectorAt(lon, lat, currentMonth, cyclone, pressureSystems);
-            
-            // 陆地判定
-            if (checkLandFast(lon, lat)) {
-                const elevation = getElevationAt(lon, lat);
-                const { k, alpha } = getSurfaceCorrection(elevation);
-                vec.magnitude *= k;
-                    
-                const rad = (lat > 0 ? 1 : -1) * (alpha * Math.PI / 180);
-                    
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                    
-                const newU = vec.u * cos - vec.v * sin;
-                const newV = vec.u * sin + vec.v * cos;
-                    
-                vec.u = newU * k;
-                vec.v = newV * k;
-            }
 
             if (vec.magnitude <= 0) continue;
 
@@ -2094,6 +2062,7 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
         // 开始绘制
         let lastStepData = null;
         const boundaryPoints = []; 
+        const rawSteps = [];
         const meanTrack = []; // 用于收集中心线
 
         for (let i = 0; i <= quantizedLimit; i++) {
@@ -2119,40 +2088,69 @@ export function renderJTWCStyle(cyclone, timeIndex, worldData) {
             const jitter = Math.sin(i * 132.19 + snapAge) * 0.1; 
             const breathing = Math.cos(i * 0.5) * 0.03;
             let radiusDeg = Math.max(0.02, (0.02 + i * 0.14) + (stdDev * 1.5) + (jitter + breathing) * (1 + i * 0.05));
-            const cosL = Math.cos(avgLat * Math.PI / 180);
+rawSteps.push({
+                lon: avgLon,
+                lat: avgLat,
+                r: radiusDeg,
+                cosL: Math.cos(avgLat * Math.PI / 180) // 缓存纬度校正系数
+            });
+        }
+        
+        for (let i = 0; i < rawSteps.length; i++) {
+            const curr = rawSteps[i];
+            const prev = rawSteps[i - 1];
+            const next = rawSteps[i + 1];
 
-            let angle = 0;
-            const nextPoints = [];
-            if (i < quantizedLimit) { // 只探测到 limit
-                forecastModels.forEach(m => { if (m.track[i+1]) nextPoints.push(m.track[i+1]); });
-                if (nextPoints.length > 0) {
-                     const nextLon = d3.mean(nextPoints, p => p[0]);
-                     const nextLat = d3.mean(nextPoints, p => p[1]);
-                     let dLon = nextLon - avgLon; 
-                     angle = Math.atan2(nextLat - avgLat, dLon * cosL);
-                }
-            } else if (lastStepData) {
-                 let dLon = avgLon - lastStepData.center[0];
-                 angle = Math.atan2(avgLat - lastStepData.center[1], dLon * cosL);
+            // 计算切线向量 (dx, dy)
+            let dx = 0, dy = 0;
+
+            if (i === 0 && next) {
+                // 起点：指向下一个点
+                dx = (next.lon - curr.lon) * curr.cosL;
+                dy = next.lat - curr.lat;
+            } else if (i === rawSteps.length - 1 && prev) {
+                // 终点：延续上一个点的方向
+                dx = (curr.lon - prev.lon) * curr.cosL;
+                dy = curr.lat - prev.lat;
+            } else if (prev && next) {
+                // [关键修复] 中间点：使用前后两段向量的平均值 (角平分线逻辑)
+                // 向量1: Prev -> Curr
+                const v1x = (curr.lon - prev.lon) * curr.cosL;
+                const v1y = curr.lat - prev.lat;
+                // 向量2: Curr -> Next
+                const v2x = (next.lon - curr.lon) * curr.cosL;
+                const v2y = next.lat - curr.lat;
+                
+                // 简单的向量相加即可得到平滑切线
+                dx = v1x + v2x;
+                dy = v1y + v2y;
             }
 
-            const normal = angle + Math.PI / 2;
-            const currentStep = {
-                center: [avgLon, avgLat],
-                left: [avgLon + (radiusDeg * Math.cos(normal) / cosL), avgLat + (radiusDeg * Math.sin(normal))],
-                right: [avgLon + (radiusDeg * Math.cos(normal + Math.PI) / cosL), avgLat + (radiusDeg * Math.sin(normal + Math.PI))],
-                radiusDeg: radiusDeg
-            };
+            // 如果重合或异常，给默认方向
+            if (dx === 0 && dy === 0) { dx = 1; dy = 0; }
 
-            const pCenter = projection(currentStep.center);
-            const pLeft = projection(currentStep.left);
-            const pRight = projection(currentStep.right);
+            // 计算法线角度 (切线 + 90度)
+            const angle = Math.atan2(dy, dx);
+            const normal = angle + Math.PI / 2;
+
+            // 计算左右边界坐标 (Lat/Lon)
+            // 注意：经度偏移需要除以 cosL
+            const leftLon = curr.lon + (curr.r * Math.cos(normal) / curr.cosL);
+            const leftLat = curr.lat + (curr.r * Math.sin(normal));
+            
+            const rightLon = curr.lon + (curr.r * Math.cos(normal + Math.PI) / curr.cosL);
+            const rightLat = curr.lat + (curr.r * Math.sin(normal + Math.PI));
+
+            // 投影到屏幕坐标
+            const pCenter = projection([curr.lon, curr.lat]);
+            const pLeft = projection([leftLon, leftLat]);
+            const pRight = projection([rightLon, rightLat]);
 
             if (pCenter && pLeft && pRight) {
-                const screenR = Math.hypot(pLeft[0]-pCenter[0], pLeft[1]-pCenter[1]);
+                // 计算屏幕上的像素半径 (用于最后的圆头绘制)
+                const screenR = Math.hypot(pLeft[0] - pCenter[0], pLeft[1] - pCenter[1]);
                 boundaryPoints.push({ left: pLeft, right: pRight, center: pCenter, radius: screenR });
             }
-            lastStepData = currentStep;
         }
 
         // --- 2. 定义通用路径函数 ---

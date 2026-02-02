@@ -312,7 +312,7 @@ const fsSource = `
         }
 
         // [环境单体雷暴] - 你的目标代码段
-        vec2 windOffset = wind * u_time * 0.05;
+        vec2 windOffset = (wind + 5.0) * u_time * 0.05;
         vec2 macroPos = (world_pos * 0.6) - windOffset * 0.5; 
         float macroNoise = fbm(macroPos, 2); 
         vec2 microPos = (world_pos * 5.0) - windOffset; 
@@ -662,7 +662,7 @@ export function calculateRadarDbz(lon, lat, state, seed = 0.0) {
     // --- C. 单体雷暴 / 环境对流 (CPU 实现) ---
     // ----------------------------------------------------
     const world_pos = { x: lon, y: lat };
-    const windOffset = { x: wind.x * u_time * 0.05, y: wind.y * u_time * 0.05 };
+    const windOffset = { x: (wind.x + 5.0) * u_time * 0.05, y: (wind.y + 5.0) * u_time * 0.05 };
     
     // Macro
     // [关键修复] 将 Y 轴 multiplier 从 0.8 改为 0.6，与 Shader 保持一致

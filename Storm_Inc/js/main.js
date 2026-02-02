@@ -2323,6 +2323,18 @@ if (isHistoryMode) {
             const dd = String(simDate.getUTCDate()).padStart(2, '0');
             const hh = String(simDate.getUTCHours()).padStart(2, '0');
             const validTimeStr = `${dd}/${hh}Z`; // 例如: 05/12Z
+            const yyyyStr = simDate.getUTCFullYear();
+            const mmStr = String(simDate.getUTCMonth() + 1).padStart(2, '0');
+            const ddStr = String(simDate.getUTCDate()).padStart(2, '0');
+            const hhStr = String(simDate.getUTCHours()).padStart(2, '0');
+            const obsTimeCode = `${yyyyStr}${mmStr}${ddStr}${hhStr}`;
+
+            // 2. 计算降水 (3小时累积估算)
+            const precipVal = Math.max(0, (dbz - 12) * 2);
+            const precipStr = precipVal.toFixed(1); // 保留1位小数 (8.6MM)
+
+            // 3. 拼接最终字符串
+            const rawObsText = `${obsTimeCode} ${localWindKt}KT ${localWindDirStr} ${localPressure}hPa ${precipStr}MM`;
 
 contentArea.innerHTML = `
                 <div class="bg-white p-6 shadow-sm border border-gray-200 w-full max-w-2xl font-mono h-full flex flex-col">
@@ -2338,6 +2350,9 @@ contentArea.innerHTML = `
                         <div class="text-right">
                             <div class="text-3xl font-black text-cyan-700">${validTimeStr}</div>
                             <div class="text-xs text-gray-400 font-bold">VALID TIME</div>
+                            <button id="btn-show-obs-text" class="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded border border-slate-300 transition-colors">
+                                <i class="fa-solid fa-file-code"></i> TEXT REPORT
+                            </button>
                         </div>
                     </div>
 
@@ -2408,6 +2423,59 @@ contentArea.innerHTML = `
                 // 更新高亮状态
                 panelPressure.classList.add('border-yellow-400', 'bg-yellow-50');
                 panelWind.classList.remove('border-cyan-400', 'bg-cyan-50');
+            };
+            document.getElementById('btn-show-obs-text').onclick = () => {
+                const container = document.querySelector(chartContainer);
+                titleLabel.textContent = "FULL OBSERVATION LOG (CHRONOLOGICAL)";
+                
+                // 1. 准备基础日期参数
+                const baseYear = new Date().getFullYear();
+                const baseMonthIndex = (state.currentMonth || 8) - 1; 
+
+                // 2. 遍历历史切片，生成每一行报文
+                // historySlice 已经包含了从 T=0 到 当前时刻 的所有记录
+                const logLines = historySlice.map(h => {
+                    // A. 恢复时间
+                    const tDate = new Date(Date.UTC(baseYear, baseMonthIndex, 1));
+                    tDate.setUTCHours(tDate.getUTCHours() + h.hour);
+
+                    const yyyy = tDate.getUTCFullYear();
+                    const mm = String(tDate.getUTCMonth() + 1).padStart(2, '0');
+                    const dd = String(tDate.getUTCDate()).padStart(2, '0');
+                    const hh = String(tDate.getUTCHours()).padStart(2, '0');
+                    const timeStr = `${yyyy}${mm}${dd}${hh}`;
+
+                    // B. 恢复数据
+                    const w = Math.round(h.wind);
+                    const p = Math.round(h.pressure);
+
+                    // 恢复风向字符串
+                    const angleMath = Math.atan2(-h.v, h.u) * (180 / Math.PI);
+                    let dirDeg = (angleMath + 270) % 360;
+                    if (dirDeg < 0) dirDeg += 360;
+                    const dirStr = directionToCompass(dirDeg);
+
+                    // 恢复降水
+                    const dVal = h.dbz || 0;
+                    const prec = Math.max(0, (dVal - 15) * (Math.random() + 1.8)).toFixed(1);
+
+                    // C. 格式化单行 (使用 padEnd/padStart 对齐，让排版更整齐)
+                    // 例如: 2026070106  12KT  NE   1008hPa  0.0MM
+                    return `${timeStr}  ${String(w).padStart(3)}KT  ${dirStr.padEnd(3)}  ${p}hPa  ${prec.padStart(5)}MM`;
+                }).join('\n'); // 用换行符连接
+
+                // 3. 渲染到 Textarea (方便复制和滚动)
+                container.innerHTML = `
+                    <div class="w-full h-full p-2 bg-slate-50 border border-slate-200 rounded">
+                        <textarea class="w-full h-full bg-transparent font-mono text-xs md:text-sm text-slate-700 resize-none focus:outline-none leading-relaxed p-2" readonly spellcheck="false">${logLines}</textarea>
+                    </div>
+                `;
+                
+                // 自动滚动到底部 (显示最新的一行)
+                setTimeout(() => {
+                    const textarea = container.querySelector('textarea');
+                    if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                }, 10);
             };
         };
 
@@ -2495,7 +2563,7 @@ contentArea.innerHTML = `
                 const stream = canvas.captureStream(30); 
                 const recorder = new MediaRecorder(stream, {
                     mimeType: 'video/webm;codecs=vp9',
-                    videoBitsPerSecond: 24000000
+                    videoBitsPerSecond: 36000000
                 });
 
                 const chunks = [];
