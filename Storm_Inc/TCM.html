@@ -22,7 +22,6 @@
     <link rel="mask-icon" href="favicon/safari-pinned-tab.svg" color="#5bbad5">
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
-    <!-- [恢复] 用户指定的导航脚本 -->
 
     <script>
         tailwind.config = {
@@ -429,7 +428,7 @@
 
         <!-- 顶部栏 -->
         <header class="flex justify-between items-start pointer-events-auto">
-            <div class="group relative left-6">
+            <div class="group relative left-8">
                 <h1 class="text-2xl md:text-4xl font-black tracking-tighter text-white drop-shadow-lg italic">
                     STORM<span class="text-cyan-500">_</span>INC <span class="text-[10px] md:text-xs font-mono font-normal tracking-[0.3em] text-slate-500 not-italic align-middle ml-2 group-hover:text-cyan-400 transition-colors">DYNAMICS ENGINE</span>
                 </h1>
@@ -471,6 +470,10 @@
                     <source src="Freshly Squeezed - Graham Donald Harry Preskett.m4a" type="audio/mpeg">
                 </audio>
                 <!-- [新增] 语言切换按钮 -->
+                <button id="langButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-cyan-400 font-mono text-xs font-bold w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5" title="Switch Language">
+                    EN
+                </button>
+
                 <button id="settingsButton" class="bg-black/40 backdrop-blur-md border border-white/10 hover:border-cyan-400/50 text-slate-400 hover:text-cyan-400 w-10 h-10 rounded-full transition-all flex items-center justify-center shadow-lg hover:bg-white/5">
                     <i class="fa-solid fa-sliders"></i>
                 </button>
@@ -1579,7 +1582,7 @@
                     siteNameInput.placeholder = currentLang === 'EN' ? "SITE CALLSIGN" : "站点呼号";
                 }
                 
-                langButton.textContent = currentLang === 'EN' ? "EN" : "EN";
+                langButton.textContent = currentLang === 'EN' ? "EN" : "CN";
                 localStorage.setItem('userLanguage', currentLang); // [修复] 使用正确的变量名 currentLang
             }
 
