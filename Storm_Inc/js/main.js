@@ -875,7 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateInfoPanel() {
         const cat = getCategory(state.cyclone.intensity, state.cyclone.isTransitioning, state.cyclone.isExtratropical, state.cyclone.isSubtropical);
-        document.getElementById('simulationTime').textContent = `模拟时间: T+${state.cyclone.age} 小时`;
+        document.getElementById('simulationTime').textContent = `SIM T+${state.cyclone.age} 小时`;
         document.getElementById('latitude').textContent = `${state.cyclone.lat.toFixed(1)}°N`;
         document.getElementById('longitude').textContent = `${state.cyclone.lon.toFixed(1)}°E`;
         document.getElementById('intensity').textContent = `${knotsToKph(state.cyclone.intensity)} kph (${knotsToMph(state.cyclone.intensity)} mph)`;

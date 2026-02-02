@@ -2718,6 +2718,134 @@ rawSteps.push({
 
     ctx.restore();
 
+    const cityDatabase = [
+        { name: "NAHA", lat: 26.21, lon: 127.68 },
+        { name: "KADENA", lat: 26.35, lon: 127.77 },
+        { name: "TOKYO", lat: 35.69, lon: 139.69 },
+        { name: "YOKOSUKA", lat: 35.28, lon: 139.67 },
+        { name: "SASEBO", lat: 33.16, lon: 129.72 },
+        { name: "OSAKA", lat: 34.69, lon: 135.50 },
+        { name: "IWO TO", lat: 24.78, lon: 141.32 },
+        { name: "TAIPEI", lat: 25.03, lon: 121.56 },
+        { name: "HONG KONG", lat: 22.32, lon: 114.17 },
+        { name: "MANILA", lat: 14.60, lon: 120.98 },
+        { name: "SUBIC BAY", lat: 14.78, lon: 120.28 },
+        { name: "GUAM", lat: 13.44, lon: 144.79 },
+        { name: "SAIPAN", lat: 15.20, lon: 145.75 },
+        { name: "YAP", lat: 9.51, lon: 138.12 },
+        { name: "KOROR", lat: 7.34, lon: 134.48 },
+        { name: "SHANGHAI", lat: 31.23, lon: 121.47 },
+        { name: "SEOUL", lat: 37.56, lon: 126.97 },
+        { name: "HANOI", lat: 21.02, lon: 105.83 },
+        { name: "HO CHI MINH", lat: 10.82, lon: 106.63 }
+    ];
+
+    // 2. 获取预测路径 (优先使用 meanTrack 平滑中心线，否则用模型1)
+    let forecastPath = [];
+    if (typeof meanTrack !== 'undefined' && meanTrack.length > 1) {
+        forecastPath = meanTrack; 
+    } else if (forecastModels.length > 0) {
+        forecastPath = forecastModels[0].track;
+    }
+
+    // 辅助函数：大圆距离 (Haversine) - 如果外部已有 calculateDistance 可直接替换
+    const getDist = (lat1, lon1, lat2, lon2) => {
+        const R = 6371; // km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    };
+
+    // 3. 计算指标
+    const cityMetrics = cityDatabase.map(city => {
+        // A. 当前距离
+        const currentDist = getDist(currentPoint[1], currentPoint[0], city.lat, city.lon);
+        
+        // B. CPA 插值计算 (点到线段的最短距离)
+        let minCpa = currentDist; // 初始值为当前距离
+        
+        if (forecastPath.length > 1) {
+            for (let i = 0; i < forecastPath.length - 1; i++) {
+                const p1 = forecastPath[i];   // [lon, lat]
+                const p2 = forecastPath[i+1]; // [lon, lat]
+                
+                // 将经纬度投影到局部平面进行几何计算 (纬度校正)
+                const latMid = (p1[1] + p2[1]) / 2 * (Math.PI / 180);
+                const cosLat = Math.cos(latMid);
+                
+                // 向量 P1->P2
+                const dx = (p2[0] - p1[0]) * cosLat;
+                const dy = p2[1] - p1[1];
+                // 向量 P1->City
+                const cx = (city.lon - p1[0]) * cosLat;
+                const cy = city.lat - p1[1];
+                
+                // 投影因子 t
+                const lenSq = dx*dx + dy*dy;
+                let t = (lenSq > 0) ? (cx*dx + cy*dy) / lenSq : 0;
+                t = Math.max(0, Math.min(1, t)); // 限制在线段内
+                
+                // 找到最近点坐标
+                const closestLon = p1[0] + t * (p2[0] - p1[0]);
+                const closestLat = p1[1] + t * (p2[1] - p1[1]);
+                
+                // 计算实际距离
+                const segDist = getDist(city.lat, city.lon, closestLat, closestLon);
+                if (segDist < minCpa) minCpa = segDist;
+            }
+        }
+        
+        return { name: city.name, curr: currentDist, cpa: minCpa };
+    });
+
+    // 4. 排序并筛选 (按当前距离最近的 Top 3)
+    cityMetrics.sort((a, b) => a.curr - b.curr);
+    const topCities = cityMetrics.slice(0, 3);
+
+    // 5. 绘制列表框
+    // 位置：图例下方，X轴与图例对齐
+    // legendX, legendY, legendH 是前面定义的变量
+    const listX = legendX; 
+    const listY = legendY + legendH + 10; // 紧贴图例下方
+    const listW = legendW;
+    const listH = 65; // 高度
+
+    ctx.save();
+    
+    // 背景
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]); // 确保是实线
+    ctx.fillRect(listX, listY, listW, listH);
+    ctx.strokeRect(listX, listY, listW, listH);
+
+    // 标题
+    ctx.fillStyle = "black";
+    ctx.font = "bold 10px Arial";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("CLOSEST CITIES / CPA (INTERPOLATED)", listX + 5, listY + 5);
+
+    // 列表内容 (使用等宽字体对齐)
+    ctx.font = "10px 'JetBrains Mono', 'Courier New', monospace";
+    
+    topCities.forEach((c, i) => {
+        const y = listY + 20 + i * 14;
+        
+        // 格式化数据: "NAHA       866KM CPA 339KM"
+        const nameStr = c.name.padEnd(11, " "); // 城市名占11格
+        const currStr = `${Math.round(c.curr)}KM`.padStart(5, " "); // 距离占5格右对齐
+        const cpaStr = `CPA ${Math.round(c.cpa)}KM`.padStart(9, " "); // CPA占9格右对齐
+        
+        ctx.fillText(`${nameStr} ${currStr} ${cpaStr}`, listX + 5, y);
+    });
+
+    ctx.restore();
+
     // ============================================================
     // J. 绘制水印 (Watermark)
     // ============================================================
