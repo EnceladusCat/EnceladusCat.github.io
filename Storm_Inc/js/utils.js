@@ -205,7 +205,7 @@ export const windToPressure = (windKts, circulationSize = 300, basin = 'WPAC', e
               backgroundPressure = 1018; 
         }
     }
-    const basePressureCalc = backgroundPressure - 12.2 * (windKts ** 1.6) / (48.0) ** 1.6;
+    const basePressureCalc = backgroundPressure - 12.5 * (windKts ** 1.6) / (48.0) ** 1.6;
     const pressure = basePressureCalc + (basePressureCalc - backgroundPressure) * (0.0012 * circulationSize);
     return Math.max(640, Math.round(pressure));
 };
