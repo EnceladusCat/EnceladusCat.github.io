@@ -275,8 +275,8 @@ export function initializePressureSystems(cyclone, month) {
     tempAllSystems.push({
         type: 'low', // 标记类型以便分层
         x: 120, y: 10 + (Math.random() - 0.5) * 5, 
-        baseSigmaX: 70, sigmaX: 70, sigmaY: 10 + Math.random() * 4, 
-        strength: -(8 + Math.random() * 3), baseStrength: -(8 + Math.random() * 3),
+        baseSigmaX: 70, sigmaX: 70, sigmaY: 20 + Math.random() * 4, 
+        strength: -(5 + Math.random() * 3) * (0.5+0.5*seasonalFactor), baseStrength: -(5 + Math.random() * 3) * (0.5+0.5*seasonalFactor),
         velocityX: (Math.random() - 0.5) * 0.01, velocityY: (Math.random() - 0.5) * 0.01,
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.01 + Math.random() * 0.01, oscillationAmount: 0.01,
         noiseLayers: []
