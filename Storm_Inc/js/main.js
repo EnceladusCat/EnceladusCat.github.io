@@ -1242,10 +1242,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 历史列表显示的名称
                 const historyName = `${statusText} (${basinCode} ${cycloneNumStr}) - T+${totalHours}h, Peak ${peakIntensityKt}kt`;
-
+                const cycloneClone = { ...state.cyclone };
+                const satCacheRef = cycloneClone.satelliteCache;
+                delete cycloneClone.satelliteCache;
+                const cycloneDataDeep = JSON.parse(JSON.stringify(cycloneClone));
+                if (satCacheRef) {
+                    cycloneDataDeep.satelliteCache = satCacheRef;
+                }
                 state.history.push({ 
                     name: historyName, 
-                    cycloneData: JSON.parse(JSON.stringify(state.cyclone)),
+                    cycloneData: cycloneDataDeep,
                     atcfData: bestTrackText,
                     pressureHistory: JSON.parse(JSON.stringify(state.pressureHistory || [])),
                     siteHistory: JSON.parse(JSON.stringify(state.siteHistory || []))
