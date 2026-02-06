@@ -1,38 +1,68 @@
 /**
  * js/audio.js
- * 基于 Web Audio API 的实时音效库
- * 包含：初始化、音频分析器连接、噪声生成及各类 UI 音效
  */
 
 let audioCtx = null;
 let masterGain = null;
-let analyser = null; // 音频分析器 (用于视觉化)
-let noiseBuffer = null; // 白噪声缓存
+let analyser = null;
+let noiseBuffer = null;
 let isSFXMuted = false;
+
+// Reverb impulse response for adding depth
+let reverbBuffer = null;
+let reverbNode = null;
 
 export function toggleSFX() {
     isSFXMuted = !isSFXMuted;
     return isSFXMuted;
 }
 
-// 初始化音频上下文
+// Create a simple reverb impulse response
+function createReverbBuffer() {
+    const sampleRate = audioCtx.sampleRate;
+    const length = sampleRate * 1.5; // 1.5 second reverb
+    const impulse = audioCtx.createBuffer(2, length, sampleRate);
+    
+    for (let channel = 0; channel < 2; channel++) {
+        const channelData = impulse.getChannelData(channel);
+        for (let i = 0; i < length; i++) {
+            // Exponentially decaying noise
+            channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 3);
+        }
+    }
+    
+    return impulse;
+}
+
+// Initialize audio context
 export function initAudio() {
     if (!audioCtx) {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         
-        // --- 视觉化核心：创建分析器 ---
+        // Create analyser for visualization
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 2048; // 精度
+        analyser.fftSize = 2048;
+        
+        // Create reverb
+        reverbBuffer = createReverbBuffer();
+        reverbNode = audioCtx.createConvolver();
+        reverbNode.buffer = reverbBuffer;
+        
+        const reverbGain = audioCtx.createGain();
+        reverbGain.gain.value = 0.15; // Subtle reverb
         
         masterGain = audioCtx.createGain();
-        masterGain.gain.value = 0.2; // 主音量
+        masterGain.gain.value = 0.25; // Slightly higher master volume
         
-        // 连接链：Master -> Analyser -> Speaker
+        // Connection chain: Master -> Reverb -> Analyser -> Speaker
         masterGain.connect(analyser);
+        masterGain.connect(reverbGain);
+        reverbGain.connect(reverbNode);
+        reverbNode.connect(analyser);
         analyser.connect(audioCtx.destination);
         
-        // 生成白噪声 Buffer (用于 playClick 等音效)
+        // Generate white noise buffer
         const bufferSize = audioCtx.sampleRate * 2;
         noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
         const data = noiseBuffer.getChannelData(0);
@@ -41,215 +71,165 @@ export function initAudio() {
         }
     }
     
-    // 处理浏览器挂起状态
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
 }
 
-function playTone(freq, startTime, duration, type = 'sine') {
-    if (!audioCtx || isSFXMuted) return;
+/**
+ * Helper: Create a smooth oscillator with proper envelope and filtering
+ */
+function createSmoothTone(freq, startTime, duration, type = 'sine', options = {}) {
+    if (!audioCtx || isSFXMuted) return null;
+    
+    const {
+        attack = 0.02,
+        release = 0.1,
+        peakGain = 0.3,
+        filterFreq = null, // Lowpass filter frequency
+        detune = 0
+    } = options;
     
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-
+    
     osc.type = type;
     osc.frequency.value = freq;
-
-    // 包络设置 (ADSR): 快速起音，中等衰减，模拟敲击乐/钟声
+    osc.detune.value = detune;
+    
+    // Smooth envelope (prevents clicks)
+    const attackTime = startTime + attack;
+    const releaseStart = startTime + duration - release;
+    
     gainNode.gain.setValueAtTime(0, startTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.02); // Attack
-    gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration); // Decay
-
+    gainNode.gain.linearRampToValueAtTime(peakGain, attackTime);
+    gainNode.gain.setValueAtTime(peakGain, releaseStart);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    
     osc.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
+    
+    // Optional lowpass filter for warmth
+    if (filterFreq) {
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = filterFreq;
+        filter.Q.value = 1;
+        gainNode.connect(filter);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+        
+        return { osc, gain: gainNode, filter };
+    }
+    
     osc.start(startTime);
     osc.stop(startTime + duration);
+    
+    return { osc, gain: gainNode };
 }
 
-// ... (保留 playClick, playAlert 等其他函数) ...
-
-// [新增] 台风升级音效: 4音符，C大调大七和弦 (C-E-G-B)，播放两次
-export function playUpgradeSound() {
-    if (isSFXMuted) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
-    const now = audioCtx.currentTime;
-    
-    // 音符频率表 (C5, E5, G5, B5) -> 听起来非常明亮、开心
-    const notes = [523.25, 659.25, 783.99, 1047.77]; 
-    
-    // 节奏设置
-    const noteLen = 0.12; // 每个音符的间隔
-    const repeatDelay = 0.9; // 重复时的停顿间隔
-
-    // 第一遍: 噔-噔-噔-噔 (C-E-G-B)
-    notes.forEach((freq, i) => {
-        // 使用 'triangle' (三角波) 会比正弦波更像 8-bit 游戏机或电子提示音，听起来更悦耳
-        // 也可以混合使用，这里用 sine 叠加一点泛音感觉会更纯净，我们直接用 triangle 增加一点厚度
-        playTone(freq, now + i * noteLen, 0.4, 'triangle');
-        
-        // 叠加一个高八度的正弦波，增加“水晶”质感
-        playTone(freq * 2, now + i * noteLen, 0.3, 'sine'); 
-    });
-
-    // 第二遍: 噔-噔-噔-噔 (重复)
-    notes.forEach((freq, i) => {
-        const startTime = now + repeatDelay + i * noteLen;
-        playTone(freq, startTime, 0.4, 'triangle');
-        playTone(freq * 2, startTime, 0.3, 'sine');
-    });
-}
-
-export function playCat5Sound() {
-    if (isSFXMuted) return;
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-
-    const now = audioCtx.currentTime;
-    
-    // 5个音符 (C5, E5, G5, B5, D6) - C Major 9
-    const notes = [523.25, 659.25, 783.99, 987.77, 1174.66]; 
-    const noteLen = 0.08; // 单个音符的间隔
-    const repeatDelay = 0.9; // [新增] 第二次播放的延迟时间
-
-    // 定义单次琶音的播放逻辑
-    const playArpeggio = (startTime) => {
-        notes.forEach((freq, i) => {
-            const time = startTime + i * noteLen;
-            
-            // 层1: 主音 (Triangle Wave) - 敲击感
-            const osc1 = audioCtx.createOscillator();
-            const gain1 = audioCtx.createGain();
-            osc1.type = 'triangle';
-            osc1.frequency.value = freq;
-            
-            gain1.gain.setValueAtTime(0, time);
-            gain1.gain.linearRampToValueAtTime(0.2, time + 0.02); 
-            gain1.gain.exponentialRampToValueAtTime(0.001, time + 0.6); 
-            
-            osc1.connect(gain1);
-            gain1.connect(audioCtx.destination);
-            osc1.start(time);
-            osc1.stop(time + 0.6);
-
-            // 层2: 泛音 (Sine Wave) - 水晶拖尾
-            const osc2 = audioCtx.createOscillator();
-            const gain2 = audioCtx.createGain();
-            osc2.type = 'sine';
-            osc2.frequency.value = freq * 2; // 高八度
-            
-            gain2.gain.setValueAtTime(0, time);
-            gain2.gain.linearRampToValueAtTime(0.15, time + 0.05); 
-            gain2.gain.exponentialRampToValueAtTime(0.001, time + 2.5); // 2.5秒长拖尾
-            
-            osc2.connect(gain2);
-            gain2.connect(audioCtx.destination);
-            osc2.start(time);
-            osc2.stop(time + 2.5);
-        });
-    };
-
-    // 播放第一遍
-    playArpeggio(now);
-
-    // 播放第二遍 (间隔 0.9秒)
-    playArpeggio(now + repeatDelay);
-}
+// --- IMPROVED SOUND EFFECTS ---
 
 /**
- * 获取分析器节点 (用于在 HTML 页面中绘制 Canvas)
+ * 1. Click sound - Soft, pleasant bubble-like tone
  */
-export function getAnalyser() {
-    return analyser;
-}
-
-/**
- * 内部辅助：创建带有 Detune 的振荡器
- */
-function createOscillatorNode(type, freq, startTime, duration, detune = 0) {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, startTime);
-    osc.detune.value = detune;
-
-    osc.connect(gain);
-    return { osc, gain };
-}
-
-// --- 音效定义 ---
-
-// 1. 点击音效 (Pitch Drop - 气泡/木鱼感)
 export function playClick() {
     initAudio();
     if (isSFXMuted) return;
-    const t = audioCtx.currentTime;
     
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = 'sine'; // 使用正弦波，最圆润
-
-    // 关键技巧：快速的音高下降 (Pitch Drop)
-    // 从 800Hz 快速掉到 300Hz
-    osc.frequency.setValueAtTime(800, t);
-    osc.frequency.exponentialRampToValueAtTime(300, t + 0.1);
-
-    // 音量包络：极短的起音，快速衰减
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(0.5, t + 0.01); // 10ms 起音，防止爆音
-    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-
-    osc.connect(gain);
-    gain.connect(masterGain);
-
-    osc.start(t);
-    osc.stop(t + 0.1);
+    const t = audioCtx.currentTime;
+    const duration = 0.15;
+    
+    // Two layered oscillators for richness
+    const fundamental = createSmoothTone(520, t, duration, 'sine', {
+        attack: 0.005,
+        release: 0.08,
+        peakGain: 0.2,
+        filterFreq: 2000
+    });
+    
+    const harmonic = createSmoothTone(780, t, duration * 0.6, 'sine', {
+        attack: 0.01,
+        release: 0.05,
+        peakGain: 0.1
+    });
+    
+    if (fundamental) fundamental.gain.connect(masterGain);
+    if (harmonic) harmonic.gain.connect(masterGain);
 }
 
-// 2. 开启开关 (双振荡器 Detune - 科技感)
+/**
+ * 2. Toggle On - Rising, cheerful sound
+ */
 export function playToggleOn() {
     initAudio();
     if (isSFXMuted) return;
+    
     const t = audioCtx.currentTime;
-    const duration = 0.15;
-
-    [0, 15].forEach(detuneAmount => {
-        const { osc, gain } = createOscillatorNode('triangle', 400, t, duration, detuneAmount);
+    const duration = 0.2;
+    
+    // Create two detuned oscillators for warmth
+    [0, 8].forEach((detuneAmount, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
         
-        osc.frequency.exponentialRampToValueAtTime(800, t + duration);
+        osc.type = 'sine';
+        osc.detune.value = detuneAmount;
         
-        gain.gain.setValueAtTime(0.3, t);
-        gain.gain.linearRampToValueAtTime(0, t + duration);
+        // Rising pitch (300Hz -> 600Hz)
+        osc.frequency.setValueAtTime(300, t);
+        osc.frequency.exponentialRampToValueAtTime(600, t + duration);
         
+        // Lowpass filter for smoothness
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1200, t);
+        filter.frequency.exponentialRampToValueAtTime(2400, t + duration);
+        
+        // Smooth envelope
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.15, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+        
+        osc.connect(filter);
+        filter.connect(gain);
         gain.connect(masterGain);
+        
         osc.start(t);
         osc.stop(t + duration);
     });
 }
 
-// 3. 关闭开关 (Sawtooth + Lowpass Filter - 柔和关闭)
+/**
+ * 3. Toggle Off - Falling, gentle sound
+ */
 export function playToggleOff() {
     initAudio();
     if (isSFXMuted) return;
+    
     const t = audioCtx.currentTime;
-    const duration = 0.15;
+    const duration = 0.18;
     
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     const filter = audioCtx.createBiquadFilter();
     
-    osc.type = 'sawtooth';
-    osc.frequency.value = 150;
+    osc.type = 'sine';
     
+    // Falling pitch (600Hz -> 280Hz)
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.exponentialRampToValueAtTime(280, t + duration);
+    
+    // Lowpass filter sweeping down
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, t);
-    filter.frequency.exponentialRampToValueAtTime(100, t + duration);
+    filter.frequency.setValueAtTime(2000, t);
+    filter.frequency.exponentialRampToValueAtTime(400, t + duration);
+    filter.Q.value = 1.5;
     
-    gain.gain.setValueAtTime(0.3, t);
-    gain.gain.linearRampToValueAtTime(0, t + duration);
+    // Smooth envelope
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
     
     osc.connect(filter);
     filter.connect(gain);
@@ -259,112 +239,283 @@ export function playToggleOff() {
     osc.stop(t + duration);
 }
 
-// 4. 游戏开始/模拟启动 (快速琶音)
+/**
+ * 4. Start sound - Bright ascending arpeggio
+ */
 export function playStart() {
     initAudio();
     if (isSFXMuted) return;
+    
     const t = audioCtx.currentTime;
     
-    // 你自定义的音符序列
-    // 523.25(C5), 659.25(E5), 783.99(G5), 646.50(近似 E5)
-    const notes = [523.25, 659.25, 783.99, 646.50];
+    // Pleasant major chord arpeggio: C5-E5-G5-C6
+    const notes = [523.25, 659.25, 783.99, 1046.50];
     
     notes.forEach((freq, i) => {
-        // 每个音符非常短，且紧凑播放
-        const startTime = t + (i * 0.05); // 间隔仅 50ms
-        const duration = 0.4; // 余音较短
+        const startTime = t + (i * 0.08);
+        const duration = 0.5;
+        
+        // Main tone
+        const main = createSmoothTone(freq, startTime, duration, 'sine', {
+            attack: 0.015,
+            release: 0.25,
+            peakGain: 0.2,
+            filterFreq: 3500
+        });
+        
+        // Harmonic for richness
+        const harmonic = createSmoothTone(freq * 2, startTime, duration * 0.7, 'sine', {
+            attack: 0.03,
+            release: 0.2,
+            peakGain: 0.08
+        });
+        
+        if (main) main.gain.connect(masterGain);
+        if (harmonic) harmonic.gain.connect(masterGain);
+    });
+}
 
+/**
+ * 5. Error sound - Clear but not harsh warning tone
+ */
+export function playError() {
+    initAudio();
+    if (isSFXMuted) return;
+    
+    const t = audioCtx.currentTime;
+    
+    // Two-tone warning (less harsh than original)
+    const frequencies = [440, 330]; // A4 and E4
+    
+    frequencies.forEach((freq, i) => {
+        const startTime = t + (i * 0.15);
+        const duration = 0.15;
+        
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-
-        // 使用三角波 (Triangle)
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, startTime);
-
-        // 音量包络
+        const filter = audioCtx.createBiquadFilter();
+        
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        
+        // Gentle lowpass
+        filter.type = 'lowpass';
+        filter.frequency.value = 2000;
+        filter.Q.value = 2;
+        
+        // Quick envelope
         gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-
-        osc.connect(gain);
+        gain.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        osc.connect(filter);
+        filter.connect(gain);
         gain.connect(masterGain);
-
+        
         osc.start(startTime);
         osc.stop(startTime + duration);
     });
 }
 
-// 5. 错误/警告 (FM Synthesis - 金属杂音)
-export function playError() {
-    initAudio();
-    if (isSFXMuted) return;
-    const t = audioCtx.currentTime;
-    const duration = 0.3;
-    
-    const carrier = audioCtx.createOscillator();
-    const carrierGain = audioCtx.createGain();
-    const modulator = audioCtx.createOscillator();
-    const modulatorGain = audioCtx.createGain();
-    
-    carrier.type = 'sine';
-    carrier.frequency.value = 200;
-    
-    modulator.type = 'square';
-    modulator.frequency.value = 50; 
-    modulatorGain.gain.value = 800; // 调制深度
-    
-    modulator.connect(modulatorGain);
-    modulatorGain.connect(carrier.frequency);
-    
-    carrier.connect(carrierGain);
-    carrierGain.connect(masterGain);
-    
-    carrierGain.gain.setValueAtTime(0.5, t);
-    carrierGain.gain.exponentialRampToValueAtTime(0.01, t + duration);
-    
-    carrier.start(t);
-    modulator.start(t);
-    carrier.stop(t + duration);
-    modulator.stop(t + duration);
-}
-
-// 6. 警报 (Delay/Echo - 空间感)
+/**
+ * 6. Alert sound - Spacious, attention-grabbing but pleasant
+ */
 export function playAlert() {
     initAudio();
     if (isSFXMuted) return;
-    const now = audioCtx.currentTime;
     
+    const t = audioCtx.currentTime;
+    
+    // Create delay effect
     const delay = audioCtx.createDelay();
-    delay.delayTime.value = 0.15;
+    delay.delayTime.value = 0.18;
     
     const feedback = audioCtx.createGain();
-    feedback.gain.value = 0.4;
+    feedback.gain.value = 0.3;
     
     const delayFilter = audioCtx.createBiquadFilter();
-    delayFilter.frequency.value = 1000;
+    delayFilter.type = 'lowpass';
+    delayFilter.frequency.value = 1800;
     
     delay.connect(feedback);
     feedback.connect(delayFilter);
-    delayFilter.connect(delay); // 形成环路
+    delayFilter.connect(delay);
     delay.connect(masterGain);
     
-    const notes = [880, 1108, 1318];
+    // Three-note ascending pattern: E5-G5-B5
+    const notes = [659.25, 783.99, 987.77];
+    
     notes.forEach((freq, i) => {
-        const t = now + (i * 0.1);
+        const startTime = t + (i * 0.12);
+        const duration = 0.35;
+        
         const osc = audioCtx.createOscillator();
-        const env = audioCtx.createGain();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
         
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.value = freq;
         
-        env.gain.setValueAtTime(0.3, t);
-        env.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        filter.type = 'lowpass';
+        filter.frequency.value = 3000;
         
-        osc.connect(env);
-        env.connect(masterGain);
-        env.connect(delay);
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.22, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
         
-        osc.start(t);
-        osc.stop(t + 1.3);
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterGain);
+        gain.connect(delay);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration + 0.5);
     });
+}
+
+/**
+ * 7. Upgrade sound - Cheerful celebratory chime (improved)
+ */
+export function playUpgradeSound() {
+    initAudio();
+    if (isSFXMuted) return;
+    
+    const now = audioCtx.currentTime;
+    
+    // Major 7th chord arpeggio: C5-E5-G5-B5
+    const notes = [523.25, 659.25, 783.99, 987.77];
+    
+    const noteLen = 0.10;
+    const repeatDelay = 0.65;
+    
+    // Play twice for celebration
+    [0, repeatDelay].forEach(delayOffset => {
+        notes.forEach((freq, i) => {
+            const startTime = now + delayOffset + (i * noteLen);
+            const duration = 0.45;
+            
+            // Main bell tone
+            const main = createSmoothTone(freq, startTime, duration, 'sine', {
+                attack: 0.01,
+                release: 0.2,
+                peakGain: 0.22,
+                filterFreq: 4000
+            });
+            
+            // High harmonic for sparkle
+            const sparkle = createSmoothTone(freq * 2, startTime, duration * 0.8, 'sine', {
+                attack: 0.02,
+                release: 0.15,
+                peakGain: 0.12
+            });
+            
+            // Sub-harmonic for warmth
+            const sub = createSmoothTone(freq * 0.5, startTime, duration * 0.5, 'sine', {
+                attack: 0.015,
+                release: 0.1,
+                peakGain: 0.08,
+                filterFreq: 1000
+            });
+            
+            if (main) main.gain.connect(masterGain);
+            if (sparkle) sparkle.gain.connect(masterGain);
+            if (sub) sub.gain.connect(masterGain);
+        });
+    });
+}
+
+/**
+ * 8. Category 5 sound - Epic, powerful celebration
+ */
+export function playCat5Sound() {
+    initAudio();
+    if (isSFXMuted) return;
+    
+    const now = audioCtx.currentTime;
+    
+    // Extended major 9th chord: C5-E5-G5-B5-D6
+    const notes = [523.25, 659.25, 783.99, 987.77, 1174.66];
+    
+    const noteLen = 0.09;
+    const repeatDelay = 0.75;
+    
+    // Play twice with longer reverb tail
+    [0, repeatDelay].forEach(delayOffset => {
+        notes.forEach((freq, i) => {
+            const startTime = now + delayOffset + (i * noteLen);
+            const mainDuration = 0.6;
+            const reverbDuration = 2.8;
+            
+            // Layer 1: Main bell
+            const main = audioCtx.createOscillator();
+            const mainGain = audioCtx.createGain();
+            const mainFilter = audioCtx.createBiquadFilter();
+            
+            main.type = 'sine';
+            main.frequency.value = freq;
+            
+            mainFilter.type = 'lowpass';
+            mainFilter.frequency.value = 4500;
+            mainFilter.Q.value = 0.8;
+            
+            mainGain.gain.setValueAtTime(0, startTime);
+            mainGain.gain.linearRampToValueAtTime(0.25, startTime + 0.015);
+            mainGain.gain.exponentialRampToValueAtTime(0.001, startTime + mainDuration);
+            
+            main.connect(mainFilter);
+            mainFilter.connect(mainGain);
+            mainGain.connect(masterGain);
+            
+            main.start(startTime);
+            main.stop(startTime + mainDuration);
+            
+            // Layer 2: High sparkle with long decay
+            const sparkle = audioCtx.createOscillator();
+            const sparkleGain = audioCtx.createGain();
+            
+            sparkle.type = 'sine';
+            sparkle.frequency.value = freq * 2;
+            
+            sparkleGain.gain.setValueAtTime(0, startTime);
+            sparkleGain.gain.linearRampToValueAtTime(0.15, startTime + 0.03);
+            sparkleGain.gain.exponentialRampToValueAtTime(0.001, startTime + reverbDuration);
+            
+            sparkle.connect(sparkleGain);
+            sparkleGain.connect(masterGain);
+            
+            sparkle.start(startTime);
+            sparkle.stop(startTime + reverbDuration);
+            
+            // Layer 3: Warm sub-bass
+            if (i < 3) { // Only on first 3 notes
+                const sub = audioCtx.createOscillator();
+                const subGain = audioCtx.createGain();
+                const subFilter = audioCtx.createBiquadFilter();
+                
+                sub.type = 'sine';
+                sub.frequency.value = freq * 0.5;
+                
+                subFilter.type = 'lowpass';
+                subFilter.frequency.value = 800;
+                
+                subGain.gain.setValueAtTime(0, startTime);
+                subGain.gain.linearRampToValueAtTime(0.12, startTime + 0.02);
+                subGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+                
+                sub.connect(subFilter);
+                subFilter.connect(subGain);
+                subGain.connect(masterGain);
+                
+                sub.start(startTime);
+                sub.stop(startTime + 0.4);
+            }
+        });
+    });
+}
+
+/**
+ * Get analyser node for visualization
+ */
+export function getAnalyser() {
+    return analyser;
 }

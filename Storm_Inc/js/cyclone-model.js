@@ -1,12 +1,11 @@
 /**
  * cyclone-model.js
- * 负责模拟的核心物理逻辑和状态更新。
+ * Core logic
  */
 import { NAME_LISTS, getSST, getPressureAt, normalizeLongitude, calculateDistance, windToPressure } from './utils.js';
 import { getElevationAt, getLandStatus } from './terrain-data.js';
 import { calculateBackgroundHumidity } from './visualization.js';
 
-// 在文件顶部，地形特征定义之后，添加海域配置对象
 const basinConfig = {
     'WPAC': { lon: { min: 100, max: 180 }, lat: { min: 5, max: 25 } },  // 西北太平洋
     'EPAC': { lon: { min: 180, max: 260 }, lat: { min: 5, max: 20 } },  // 东北太平洋 (140W to 80W)
@@ -17,14 +16,12 @@ const basinConfig = {
     'SATL':  { lon: { min: -50,  max: 15 }, lat: { min: -25, max: -10 } }
 };
 
-// [新增] 计算单层风场向量的辅助函数
 function calculateLayerWind(lon, lat, systems) {
     const dDeg = 0.5;
     const RE = 6371000;
     const latRad = lat * (Math.PI / 180);
-    const f = 2 * 7.292115e-5 * Math.sin(latRad); // 科氏参数
+    const f = 2 * 7.292115e-5 * Math.sin(latRad);
     
-    // 避免赤道除零
     const effectiveF = Math.abs(f) < 5e-5 ? (f >= 0 ? 5e-5 : -5e-5) : f; 
 
     const p_x_plus = getPressureAt(lon + dDeg, lat, systems, false);
@@ -32,28 +29,15 @@ function calculateLayerWind(lon, lat, systems) {
     const p_y_plus = getPressureAt(lon, lat + dDeg, systems, false);
     const p_y_minus = getPressureAt(lon, lat - dDeg, systems, false);
 
-    // 计算气压梯度力 (PGF)
-    // 注意：这里我们简化处理，假设密度恒定，直接用压力梯度代表风的驱动力
-    // 实际上 u_g = -(1/rho*f) * dP/dy
-    
     const gradX = (p_x_plus - p_x_minus);
     const gradY = (p_y_plus - p_y_minus);
 
-    // 地转风关系
-    const scale = 6.0 // 调整系数，用于将气压梯度映射到 m/s
+    const scale = 6.0;
     const u = -gradY * scale / effectiveF * 0.0001; 
     const v =  gradX * scale / effectiveF * 0.0001;
-
-    // 赤道缓冲区修正 (赤道附近转为单纯的压力流)
-    if (Math.abs(lat) < 0) {
-        return { u: -gradX * 2, v: -gradY * 2 };
-    }
-
     return { u, v };
 }
 
-// [修改] 获取指定位置的风矢量 (用于流线可视化和观测站)
-// 现在主要返回 "低层风场" (Surface/850hPa)，因为这是观测和人感受到的风
 export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
     let k = 1.0;
     let alphaDeg = 15;
@@ -65,13 +49,12 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
         alphaDeg = Math.min(55, 15 + (elevation / 17));
     }
 
-    // 转换为弧度
     const inflowAngle = alphaDeg * (Math.PI / 180);
 
-    // 1. 获取低层背景风 (Environmental Flow)
+    // 1. Environmental Flow
     const envWind = calculateLayerWind(lon, lat, pressureSystems.lower);
     
-    // 2. 气旋自身的涡旋风场 (Vortex Flow)
+    // 2. Vortex Flow
     let u_vortex = 0;
     let v_vortex = 0;
     let u_trans = 0;
@@ -84,7 +67,7 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
 
         if (dist < outerRadius) {
             let vortexSpeed = 0;
-            const maxWind = cyclone.intensity; // intensity 已经是 knots，需注意单位统一，这里简化为数值比例
+            const maxWind = cyclone.intensity;
 
             if (dist < RMW) {
                 vortexSpeed = maxWind * (dist / RMW);
@@ -92,7 +75,7 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
                 const decayExponent = 0.80 - cyclone.circulationSize * 0.0002;
                 const rawSpeed = maxWind * Math.pow(RMW / dist, decayExponent);
                 
-                // 平滑衰减
+                // Decay
                 let fade = 1;
                 const fadeStart = outerRadius * 0.35;
                 if (dist > fadeStart) {
@@ -102,16 +85,14 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
                 vortexSpeed = rawSpeed * fade;
             }
 
-            // 转化为分量 (逆时针旋转 + 低层向内辐合)
             const dx = lon - cyclone.lon;
             const dy = lat - cyclone.lat;
             const angleToCenter = Math.atan2(dy, dx);
             
-            // [新增] 摩擦辐合角 (Inflow Angle)
+            // Inflow Angle
             const rotationOffset = (cyclone.lat >= 0) ? (Math.PI / 2 + inflowAngle) : (-Math.PI / 2 - inflowAngle);
             const windAngle = angleToCenter + rotationOffset;
 
-            // 将 knot 转换为与背景风场匹配的量级 (假设背景风计算结果约为 m/s)
             const speedMs = vortexSpeed; 
 
             u_vortex = Math.cos(windAngle) * speedMs;
@@ -123,7 +104,6 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
             v_trans = Math.sin(moveAngleMath) * moveSpeed * asymmetryFactor;
             let transDecay = 1.0;
             if (dist > RMW) {
-                // 在 RMW 外开始衰减，直到 outerRadius 处归零
                 transDecay = Math.max(0, 1 - (dist - RMW) / (outerRadius - RMW));
             }
             
@@ -142,15 +122,13 @@ export function getWindVectorAt(lon, lat, month, cyclone, pressureSystems) {
 export function initializeCyclone(world, month, basin = 'WPAC', globalTemp, globalShear, customLon = null, customLat = null) {
     let lat, lon, isOverLand;
 
-    // [新增] 检查自定义坐标
     let useCustomCoords = (customLon !== null && customLat !== null);
     
     if (useCustomCoords) {
-        // 检查自定义坐标是否在陆地上
         isOverLand = world.features.some(feature => d3.geoContains(feature, [customLon, customLat]));
         if (isOverLand) {
             console.warn(`Custom coordinates (${customLon}, ${customLat}) are on land. Falling back to random generation.`);
-            useCustomCoords = false; // 坐标无效，禁用自定义坐标
+            useCustomCoords = false;
         } else {
             lon = customLon;
             lat = customLat;
@@ -158,34 +136,26 @@ export function initializeCyclone(world, month, basin = 'WPAC', globalTemp, glob
         }
     }
     
-    // [修改] 仅在不使用自定义坐标时才执行随机生成
     if (!useCustomCoords) {
-        // 1. 从配置中获取所选海域的经纬度范围
-        const selectedBasin = basinConfig[basin] || basinConfig['WPAC']; // 默认为 WPAC
+        const selectedBasin = basinConfig[basin] || basinConfig['WPAC']; // WPAC default
         const lonRange = selectedBasin.lon;
         const latBaseRange = selectedBasin.lat;
 
-        // 2. 根据月份计算季节性纬度偏移
-        // 余弦函数使纬度在8月达到最高，2月达到最低
-        const seasonalFactor = (Math.cos((month - 8) * (Math.PI / 6)) + 1) / 2; // 范围 0 到 1
+        const seasonalFactor = (Math.cos((month - 8) * (Math.PI / 6)) + 1) / 2; // 0 ~ 1
 
-        // 3. 将季节性偏移应用于基础纬度范围
-        // 例如，在冬季，整个生成区域会向南偏移
         const latRangeSpan = latBaseRange.max - latBaseRange.min;
         const hem = latBaseRange.max > 0 ? 1 : -1;
         const seasonalShift = latBaseRange.max > 0 ? (latRangeSpan / 4) * (seasonalFactor - 0.5) :
-        (latRangeSpan / 4) * (seasonalFactor - 0.5); // 计算偏移量
+        (latRangeSpan / 4) * (seasonalFactor - 0.5);
         const currentMinLat = latBaseRange.min + seasonalShift + hem*Math.max(0,(globalTemp / 2.89 - 100));
         const currentMaxLat = latBaseRange.max + 4 * seasonalShift + hem*(globalTemp / 2.89 - 100);
         const latSpan = currentMaxLat - currentMinLat;
 
-        // 4. 在指定的海域范围内随机生成一个点，直到该点不在陆地上
+        // 4. Don't spawn on land
         let sst;
         do {
             lat = currentMinLat + Math.random() * latSpan;
             lon = lonRange.min + Math.random() * (lonRange.max - lonRange.min);
-
-            // 检查生成的点是否在任何一个陆地特征内
             const status = getLandStatus(lon, lat);
             isOverLand = status.isLand;
 
@@ -194,13 +164,12 @@ export function initializeCyclone(world, month, basin = 'WPAC', globalTemp, glob
         } while (isOverLand || sst < 25.4); // 如果在陆地上或者海温过低，重试
     }
 
-    // --- 新增：副热带气旋生成逻辑 ---
+    // --- Subtropical ---
     const initialSST = getSST(lat, lon, month, globalTemp);
     let isSubtropical = false;
     let subtropicalTransitionTime = 0;
     if (initialSST < 27.5 && Math.random() < 0.75 && (lon > 122 || lon < 40)) {
         isSubtropical = true;
-        // 转化时间: 12-36 小时 (4-12个模拟步长)
         const durationSteps = 0 + Math.floor(Math.random() * 25);
         subtropicalTransitionTime = durationSteps * 3;
     }
@@ -253,17 +222,15 @@ export function initializeCyclone(world, month, basin = 'WPAC', globalTemp, glob
 export function initializePressureSystems(cyclone, month) {
     if (typeof month !== 'number' || !Number.isFinite(month)) month = 8;
     
-    // --- 1. 执行用户原有的生成逻辑 (完全一致) ---
-    // 我们先用一个临时数组收集所有系统，就像以前一样
     const tempAllSystems = [];
     
     const seasonalFactor = (Math.cos((month - 8) * (Math.PI / 6)) + 1) / 2;
     const baseLat = cyclone.lat; 
     const baseLon = cyclone.lon; 
 
-    // 1. 赤道低气压带
+    // 1. Tropical Low
     tempAllSystems.push({
-        type: 'high', // 标记类型以便分层
+        type: 'high',
         x: 140, y: 1 + (Math.random() - 0.5) * 5, 
         baseSigmaX: 300, sigmaX: 300, sigmaY: 10 + Math.random() * 4, 
         strength: -(10 + Math.random() * 3), baseStrength: -(10 + Math.random() * 3),
@@ -273,7 +240,7 @@ export function initializePressureSystems(cyclone, month) {
     });
 
     tempAllSystems.push({
-        type: 'low', // 标记类型以便分层
+        type: 'low',
         x: 120, y: 10 + (Math.random() - 0.5) * 5, 
         baseSigmaX: 70, sigmaX: 70, sigmaY: 20 + Math.random() * 4, 
         strength: -(5 + Math.random() * 3) * (0.5+0.5*seasonalFactor), baseStrength: -(5 + Math.random() * 3) * (0.5+0.5*seasonalFactor),
@@ -282,8 +249,8 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // 2. 副热带高压带
-    // (A) 西太副高
+    // 2. Subtropical High
+    // (A) WPAC
     tempAllSystems.push({
         type: 'high',
         x: 150 + (Math.random() - 0.5) * 50, 
@@ -294,7 +261,7 @@ export function initializePressureSystems(cyclone, month) {
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.02 + Math.random() * 0.01, oscillationAmount: 0.2 + Math.random() * 0.5,
         noiseLayers: []
     });
-    // (B) 大陆副高脊
+    // (B) WPAC Land
     tempAllSystems.push({
         type: 'high',
         x: 115 + (Math.random() - 0.5) * 50, 
@@ -305,7 +272,7 @@ export function initializePressureSystems(cyclone, month) {
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.025 + Math.random() * 0.05, oscillationAmount: 0.25 + Math.random() * 0.3,
         noiseLayers: []
     });
-    // (B2) 大陆副高脊2
+    // (B2) WPAC Land 2
     tempAllSystems.push({
         type: 'high',
         x: 50 + (Math.random() - 0.5) * 15, 
@@ -316,7 +283,7 @@ export function initializePressureSystems(cyclone, month) {
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.025 + Math.random() * 0.01, oscillationAmount: 0.25 + Math.random() * 0.2,
         noiseLayers: []
     });
-    // (C) 夏威夷高压
+    // (C) Hawaii High
     tempAllSystems.push({
         type: 'high',
         x: -140 + (Math.random() - 0.5) * 40, 
@@ -327,7 +294,7 @@ export function initializePressureSystems(cyclone, month) {
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.005 + Math.random() * 0.01, oscillationAmount: 0.25 + Math.random() * 0.2,
         noiseLayers: []
     });
-    // (D) 亚速尔高压
+    // (D) Atlantic High
     tempAllSystems.push({
         type: 'high',
         x: -30 + (Math.random() - 0.5) * 15, 
@@ -338,7 +305,7 @@ export function initializePressureSystems(cyclone, month) {
         oscillationPhase: Math.random() * Math.PI * 2, oscillationSpeed: 0.025 + Math.random() * 0.01, oscillationAmount: 0.25 + Math.random() * 0.2,
         noiseLayers: []
     });
-    // 南半球高压群
+    // South Hemisphere Highs
     tempAllSystems.push({
         type: 'high', x: 75 + (Math.random() - 0.5) * 50, y: -22 + (Math.random() - 0.5) * 10 + 6 * seasonalFactor,
         baseSigmaX: 40 + Math.random() * 60, sigmaX: 0, sigmaY: 5 + Math.random() * 10,
@@ -364,7 +331,7 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // (E) 极地高压
+    // (E) Polar Low
     tempAllSystems.push({
         type: 'high',
         x: -60 + (Math.random() - 0.5) * 15, 
@@ -376,7 +343,7 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // (U) 四川盆地
+    // (U) Local Low
     tempAllSystems.push({
         type: 'high',
         x: 100 + (Math.random() - 0.5) * 5, y: 20 + (Math.random() - 0.5) * 5,
@@ -386,7 +353,7 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // (F1) 随机低压
+    // (F1) Random Low
     const numberOfSystems = 2 + Math.floor(Math.random() * 11);
     for (let i = 0; i < numberOfSystems; i++) {
         tempAllSystems.push({
@@ -400,7 +367,7 @@ export function initializePressureSystems(cyclone, month) {
         });
     }
 
-    // (F0) 随机高压
+    // (F0) Random High
     const numberOfSystemsH = 0 + Math.floor(Math.random() * 2);
     for (let i = 0; i < numberOfSystemsH; i++) {
         tempAllSystems.push({
@@ -414,7 +381,7 @@ export function initializePressureSystems(cyclone, month) {
         });
     }
 
-    // (F2) 随机系统
+    // (F2) Random System
     const isWinterSeason = (month >= 10 || month <= 3);
 
     if (!isWinterSeason && Math.random() < 0.95) {
@@ -426,7 +393,7 @@ export function initializePressureSystems(cyclone, month) {
         });
     }
 
-    // 3. 副极地低压
+    // 3. Subtropical Low(North)
     const subtropicalHighs = tempAllSystems.filter(p => p.strength > 0 && p.y > 10 && p.y < 45);
     const meanSubtropicalLat = subtropicalHighs.length > 0 ? subtropicalHighs.reduce((sum, p) => sum + p.y, 0) / subtropicalHighs.length : 45;
     const subpolarLat = meanSubtropicalLat + 18 + (Math.random() - 0.5) * 4;
@@ -440,7 +407,7 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // 4. 南副极地低压
+    // 4. Subtropical Low(South)
     const subtropicalHighsS = tempAllSystems.filter(p => p.strength > 0 && p.y < -10 && p.y > -40);
     const meanSubtropicalLatS = subtropicalHighsS.length > 0 ? subtropicalHighsS.reduce((sum, p) => sum + p.y, 0) / subtropicalHighsS.length : -40;
     const subpolarLatS = meanSubtropicalLatS - 18 - (Math.random() - 0.5) * 4;
@@ -454,22 +421,16 @@ export function initializePressureSystems(cyclone, month) {
         noiseLayers: []
     });
 
-    // --- 2. 核心适配逻辑：分配到双层结构 ---
-    // 为了不破坏平衡，我们简单地将所有系统同时放入 upper 和 lower，
-    // 但是微调它们的强度，以模拟垂直切变。
-    // 副高(high): 上层强，下层略弱
-    // 低压(low): 下层强，上层弱 (或反之，取决于类型，这里简化处理)
+    // --- 2. Double Layer ---
     
     const upperSystems = [];
     const lowerSystems = [];
 
     tempAllSystems.forEach(sys => {
-        // 深拷贝两份
         const upperSys = JSON.parse(JSON.stringify(sys));
         const lowerSys = JSON.parse(JSON.stringify(sys));
         const absLat = Math.abs(sys.y);
         if (sys.type === 'high') {
-            // 高压：深厚系统，但上层通常更稳定
             upperSys.strength *= 0.6;
             lowerSys.strength *= 0.4;
         } else {
@@ -477,7 +438,7 @@ export function initializePressureSystems(cyclone, month) {
             lowerSys.strength *= 0.5;
         }
 
-        // 随机添加一点点相位差，制造切变
+        // Random tilt
         upperSys.x += (Math.random() - 0.5) * 2;
         lowerSys.x += (Math.random() - 0.5) * 2;
 
@@ -486,44 +447,39 @@ export function initializePressureSystems(cyclone, month) {
     });
 
     const systemsObj = { upper: upperSystems, lower: lowerSystems };
-    updatePressureSystems(systemsObj); // 应用初始振荡
+    updatePressureSystems(systemsObj);
     return systemsObj;
 }
 
-// [修改] 适配双层更新
 export function updatePressureSystems(systemsObj, month) {
     const updateList = (list) => {
-        // [修改] 改用倒序 for 循环，以便安全地删除(splice)消散的系统
         for (let i = list.length - 1; i >= 0; i--) {
             const cell = list[i];
             
             cell.x += cell.velocityX;
             cell.y += cell.velocityY;
             
-            // --- [新增] 冷涌(Cold Surge) 动态逻辑 ---
+            // Cold Surge ---
             if (cell.isColdSurge) {
-                // 1. 变性消散：随着南下(纬度降低)，强度衰减，形状变扁平
+                // 1. Fade
                 if (cell.y < 30) {
-                    const decay = Math.max(0, (cell.y - 10) / 20); // 10N 以下完全消散
-                    cell.strength *= 0.96 * decay; // 快速衰减
+                    const decay = Math.max(0, (cell.y - 10) / 20);
+                    cell.strength *= 0.96 * decay;
                     
-                    // 形状变化：高压脊南下入海后通常会溃散变宽
                     if (cell.sigmaX) cell.sigmaX *= 1.02; 
                     if (cell.sigmaY) cell.sigmaY *= 0.98;
                 }
 
-                // 2. 死亡判定：强度太弱或跑得太远则移除
+                // 2. Delete
                 if (cell.strength < 1.5 || cell.y < 5) {
-                    list.splice(i, 1); // 彻底移除该系统
-                    continue; // 跳过本次循环剩余部分
+                    list.splice(i, 1);
+                    continue;
                 }
             } else {
-                // 常规系统的边界循环 (冷涌通常不需要循环，因为是一次性的)
                 if (cell.x > 360) cell.x -= 360;
                 if (cell.x < 0) cell.x += 360;
             }
 
-            // 振荡逻辑 (保持不变)
             if (cell.oscillationSpeed) {
                 cell.oscillationPhase = (cell.oscillationPhase || 0) + cell.oscillationSpeed;
                 const stretch = Math.sin(cell.oscillationPhase) * cell.oscillationAmount;
@@ -539,30 +495,25 @@ export function updatePressureSystems(systemsObj, month) {
     if (systemsObj.lower) {
         updateList(systemsObj.lower);
         
-        // --- [新增] 动态生成逻辑 ---
+        // --- Generation ---
         const isWinter = (month >= 10 || month <= 3);
         
-        // 检查场上是否已有活跃的冷涌 (避免无限生成)
         const activeSurges = systemsObj.lower.filter(s => s.isColdSurge).length;
 
-        // 冬季且场上无冷涌时，有概率生成新的一波
         if (isWinter && activeSurges < 1 && Math.random() < 0.1) {
             console.log("cold high.");
             systemsObj.lower.push({
                 type: 'high',
                 isColdSurge: true, // 标记为冷涌
                 
-                // 源地：蒙古/西伯利亚 (105E-125E, 40N+)
                 x: 100 + Math.random() * 15, 
                 y: 42 + Math.random() * 5,
                 
-                // 初始形态：深厚的经向高压脊
                 baseSigmaX: 6, sigmaX: 6, 
                 sigmaY: 8 + Math.random() * 5,
                 
-                strength: 40 + Math.random() * 5, // 强高压
+                strength: 30 + Math.random() * 15,
                 
-                // 爆发南下：向东南移动
                 velocityX: 0.15 + Math.random() * 0.1,
                 velocityY: -0.2 - Math.random() * 0.2, 
                 
@@ -576,7 +527,6 @@ export function updatePressureSystems(systemsObj, month) {
 }
 
 export function updateFrontalZone(pressureSystemsObj, month) {
-    // 兼容代码：如果是数组，直接用；如果是对象，取 upper
     const list = Array.isArray(pressureSystemsObj) ? pressureSystemsObj : pressureSystemsObj.upper;
     
     const highs = list.filter(p => p.strength > 8 && p.y > 10);
@@ -587,29 +537,23 @@ export function updateFrontalZone(pressureSystemsObj, month) {
 }
 
 export function calculateSteering(lon, lat, pressureSystemsObj, bias = { u: 0, v: 0 }) {
-    // 1. 计算高层引导流 (500hPa)
     const windUpper = calculateLayerWind(lon, lat, pressureSystemsObj.upper);
-    
-    // 2. 计算低层引导流 (850hPa)
     const windLower = calculateLayerWind(lon, lat, pressureSystemsObj.lower);
 
-    // 3. 层深平均 (Deep Layer Mean)
-    // 强台风主要受深层(高层)引导，弱扰动受低层影响大
-    // 这里使用固定权重 (80% Upper, 20% Lower) 作为通用近似
+    // 3. Deep Layer Mean
     const weightUpper = 0.8;
     const weightLower = 0.2;
 
     const steerU = 0.7*(windUpper.u * weightUpper + windLower.u * weightLower) + bias.u;
     const steerV = 0.7*(windUpper.v * weightUpper + windLower.v * weightLower) + bias.v;
 
-    // Beta 漂移 (地球自转导致的向极/向西分量)
+    // Beta Drift
     const latRad = lat * (Math.PI / 180);
     const betaFactor = Math.sin(latRad < 0 ? 1.2*latRad - (Math.PI/12) : 1.2*latRad + (Math.PI/12));
     const betaU = -0.6 * betaFactor; 
     const betaV = 4.4 * betaFactor;
 
-    // [关键] 计算垂直风切变矢量 (Shear Vector)
-    // 定义：高层风 - 低层风
+    // Shear Vector
     const shearU = windUpper.u - windLower.u;
     const shearV = windUpper.v - windLower.v;
 
@@ -636,19 +580,14 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     }
 
     // --- Steering ---
-    // [使用新计算逻辑]
     const { steerU, steerV, shearU, shearV } = calculateSteering(updatedCyclone.lon, updatedCyclone.lat, pressureSystems);
-    
-    // [物理切变接入] 
-    // 计算物理切变大小 (Approx m/s to knots factor ~2.0)
     const physicalShear = Math.hypot(shearU, shearV) * 2.0; 
     
-    // 混合切变：物理切变 + 全局设置 + 随机事件
-    // 为了不破坏原有的平衡，我们将 globalShearSetting (0-200) 映射为乘数
+    // Wind Shear
     let totalShear = physicalShear * (globalShearSetting / 100.0);
     const isWinterHalf = (month >= 11 || month <= 4);
     const shearEventProb = (isWinterHalf && updatedCyclone.lon > 100 && updatedCyclone.lon < 121 && updatedCyclone.lat > 16) ? 0.55 : (isWinterHalf ? 0.045 * (globalShearSetting ** 2 / 10000) : 0.03 * (globalShearSetting ** 2 / 10000));
-    // [恢复] 随机切变事件逻辑 (作为环境扰动叠加)
+    // Random shear event
     if (updatedCyclone.shearEventActive) {
         if (updatedCyclone.age >= updatedCyclone.shearEventEndTime) {
             updatedCyclone.shearEventActive = false;
@@ -662,7 +601,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
         updatedCyclone.shearEventMagnitude = -3 + Math.random() * 6 + 1.8 * Math.abs(month - 8) ** 0.5 + Math.max(0,(globalShearSetting / 10 - 10));
     }
 
-    // 移动
+    // Movement
     let steeringDirection = (Math.atan2(steerU, steerV) * 180 / Math.PI + 360) % 360;
     let angleDiff = steeringDirection - updatedCyclone.direction;
     while (angleDiff < -180) angleDiff += 360;
@@ -672,7 +611,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     const steeringSpeedKnots = Math.hypot(steerU, steerV) * 1.94384; 
     updatedCyclone.speed += (steeringSpeedKnots - updatedCyclone.speed) * (0.3 + Math.max(0, updatedCyclone.lat / 100));
 
-    // 冷尾流
+    // Cold welling
     if (updatedCyclone.speed < 6) {
         const coolingRate = (6 - updatedCyclone.speed) / 6 * 0.25; 
         updatedCyclone.upwellingCoolingEffect = Math.min(updatedCyclone.upwellingCoolingEffect + coolingRate, 5.0); 
@@ -683,7 +622,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     let sst = getSST(updatedCyclone.lat, updatedCyclone.lon, month, globalTemp);
     sst -= updatedCyclone.upwellingCoolingEffect;
     
-    // 变性判断
+    // Transition
     if (!updatedCyclone.isTransitioning && sst < -8.0) {
         updatedCyclone.isTransitioning = true;
     }
@@ -701,7 +640,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
     
     // 1. Terrain Decay
     if (terrainElevation > 0 && updatedCyclone.intensity > 45) {
-        let weakeningFactor = 0.88 + updatedCyclone.circulationSize*0.0001*EXf - (terrainElevation / 1200); // [保留]
+        let weakeningFactor = 0.88 + updatedCyclone.circulationSize*0.0001*EXf - (terrainElevation / 1200);
         const JPAdj = (updatedCyclone.lat >= 30 && updatedCyclone.lat <= 40 && updatedCyclone.lon >= 129 && updatedCyclone.lon <= 140) ? 0.03 : 0;
         updatedCyclone.intensity *= weakeningFactor + JPAdj;
         updatedCyclone.circulationSize *= 1 + terrainElevation * 0.0008;
@@ -710,7 +649,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
         const JPAdjustment = (updatedCyclone.lat >= 30 && updatedCyclone.lat <= 40 && updatedCyclone.lon >= 129 && updatedCyclone.lon <= 140) ? 0.04 : 0;
         const PHAdjustment = (updatedCyclone.lat >= 5 && updatedCyclone.lat <= 18 && updatedCyclone.lon >= 120 && updatedCyclone.lon <= 127 && updatedCyclone.intensity < 85) ? 0.05 : 0;
         const AUAdjustment = (updatedCyclone.lat >= -18 && updatedCyclone.lat <= -10 && updatedCyclone.lon >= 123 && updatedCyclone.lon <= 137) ? 0.05 : 0;
-        updatedCyclone.intensity *= 0.88 + updatedCyclone.circulationSize*0.0001*EXf + JPAdjustment + PHAdjustment + AUAdjustment; // [保留]
+        updatedCyclone.intensity *= 0.88 + updatedCyclone.circulationSize*0.0001*EXf + JPAdjustment + PHAdjustment + AUAdjustment;
         updatedCyclone.speed *= 0.99;
 
     } else if (updatedCyclone.isExtratropical) {
@@ -778,7 +717,7 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
         // Shear Factors
         let shear = totalShear / 10.0; 
         
-        // 加上原有的纬度/季节修正项
+        // Fix term
         const nioShearBoost = (updatedCyclone.lat >= 5 && updatedCyclone.lat <= 30 && updatedCyclone.lon >= 30 && updatedCyclone.lon <= 100) ? 8.5 : 0;
         const shemShearBoost = (updatedCyclone.lat <= -5 && updatedCyclone.lat >= -30 && updatedCyclone.lon >= 100) ? (25.0 * Math.sin((month - 2) * (Math.PI / 6))) : 0;
         
@@ -789,10 +728,9 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
         }
         const latGradientFactor = baseGradient + highLatCorrection;
 
-        // 原有 shear 公式的一部作为环境底噪叠加
         shear += Math.max(0, (Math.abs(updatedCyclone.lat) * latGradientFactor - 30 + nioShearBoost + shemShearBoost)) / 20;
 
-        // Dry Air Logic (保留)
+        // Dry Air Logic
         const samplingRadiusDeg = cyclone.circulationSize * 0.005;
         let envHumiditySum = 0;
         let minEnvHumidity = 60;
@@ -812,8 +750,10 @@ export function updateCycloneState(cyclone, pressureSystems, frontalZone, world,
             const sizeSensitivity = 600 - cyclone.circulationSize; 
             dryAirFactor = (60 - effectiveHumidity) * 0.0002 * sizeSensitivity;
         }
-        
-        updatedCyclone.intensity += (potentialChange - shear - dryAirFactor);
+        const currentSize = updatedCyclone.circulationSize || 300;
+        const clampedSize = Math.max(150, Math.min(500, currentSize));
+        const sizeFactor = 1.2 + (clampedSize - 150) * (0.8 - 1.2) / (500 - 150);
+        updatedCyclone.intensity += (potentialChange - sizeFactor * shear - dryAirFactor);
     }
 
     // Extratropical Transition Trigger

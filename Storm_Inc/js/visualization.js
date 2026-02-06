@@ -4427,8 +4427,8 @@ export function renderStationSynopticChart(cyclone, timeIndex, worldData, pressu
         
         // 标注中心气压
         ctx.fillStyle = "black";
-        ctx.font = "bold 16px Arial";
-        ctx.fillText(`L (${Math.round(Pc)})`, cPos[0], cPos[1] + 40);
+        ctx.font = "bold 20px Arial";
+        ctx.fillText(`L(${Math.round(Pc)})`, cPos[0], cPos[1] + 40);
     }
 
     // --- 8. 图表装饰 ---
