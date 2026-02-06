@@ -644,6 +644,71 @@
                 </div>
             </div>
         </div>
+        
+        <div id="wind-radii-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md border border-white/20 px-5 py-2 rounded-full flex items-center gap-6 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 bg-[#c0392b] border border-white/30 shadow-[0_0_8px_rgba(192,57,43,0.6)]"></div>
+                    <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">64 KT</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 bg-[#e67e22] border border-white/30 shadow-[0_0_8px_rgba(230,126,34,0.6)]"></div>
+                    <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">50 KT</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 bg-[#f1c40f] border border-white/30 shadow-[0_0_8px_rgba(241,196,15,0.6)]"></div>
+                    <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">34 KT</span>
+                </div>
+            </div>
+        <div id="radar-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
+            <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
+                <span>LIGHT</span>
+                <span>MODERATE</span>
+                <span>HARD</span>
+            </div>
+            <div class="w-full h-4 flex border border-white/30 rounded overflow-hidden">
+                <div class="flex-1 bg-[#00ffff]"></div> <div class="flex-1 bg-[#0099ff]"></div> <div class="flex-1 bg-[#0000ff]"></div> <div class="flex-1 bg-[#00ff00]"></div> <div class="flex-1 bg-[#00cc00]"></div> <div class="flex-1 bg-[#008000]"></div> <div class="flex-1 bg-[#ffff00]"></div> <div class="flex-1 bg-[#ffcc00]"></div> <div class="flex-1 bg-[#ff8000]"></div> <div class="flex-1 bg-[#ff0000]"></div> <div class="flex-1 bg-[#cc0000]"></div> <div class="flex-1 bg-[#ff00ff]"></div> <div class="flex-1 bg-[#800080]"></div> <div class="flex-1 bg-[#ffffff]"></div> </div>
+            <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
+                <span>15</span>
+                <span>30</span>
+                <span>45</span>
+                <span>60</span>
+                <span>75+</span>
+            </div>
+        </div>
+
+        <!-- [新增] 多普勒雷达图例 -->
+        <div id="doppler-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
+            <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
+                <span>INBOUND</span>
+                <span>ZERO</span>
+                <span>OUTBOUND</span>
+            </div>
+            <!-- 使用 CSS 线性渐变模拟多色阶 -->
+            <div class="w-full h-4 border border-white/30 rounded overflow-hidden"
+                 style="background: linear-gradient(to right,
+                    #6d28d9 0%,   /* -50+ */
+                    #1e40af 10%,  /* -40 */
+                    #3b82f6 20%,  /* -30 */
+                    #15803d 30%,  /* -20 */
+                    #22c55e 40%,  /* -10 */
+                    #86efac 45%,  /* -5 */
+                    #9ca3af 50%,  /* 0 */
+                    #fde047 55%,  /* +5 */
+                    #fb923c 60%,  /* +10 */
+                    #f97316 70%,  /* +20 */
+                    #ef4444 80%,  /* +30 */
+                    #b91c1c 90%,  /* +40 */
+                    #ec4899 100%  /* +50+ */
+                 );">
+            </div>
+            <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
+                <span>-50</span>
+                <span>-25</span>
+                <span>0</span>
+                <span>+25</span>
+                <span>+50</span>
+            </div>
+        </div>
 
         <!-- 底部栏：核心控制台 -->
         <div class="flex justify-center pointer-events-auto pb-4 md:pb-0">
@@ -652,70 +717,6 @@
                 fixed bottom-0 left-0 w-full p-3 flex items-center gap-3 overflow-x-auto no-scrollbar z-50
                 md:relative md:bg-black/70 md:border md:rounded-2xl md:w-auto md:bottom-auto md:p-2.5
             ">
-                <div id="wind-radii-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md border border-white/20 px-5 py-2 rounded-full flex items-center gap-6 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100">
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 bg-[#c0392b] border border-white/30 shadow-[0_0_8px_rgba(192,57,43,0.6)]"></div>
-                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">64 KT</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 bg-[#e67e22] border border-white/30 shadow-[0_0_8px_rgba(230,126,34,0.6)]"></div>
-                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">50 KT</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-3 h-3 bg-[#f1c40f] border border-white/30 shadow-[0_0_8px_rgba(241,196,15,0.6)]"></div>
-                            <span class="text-[10px] font-mono text-slate-300 font-bold tracking-wider">34 KT</span>
-                        </div>
-                    </div>
-                <div id="radar-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
-                    <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
-                        <span>LIGHT</span>
-                        <span>MODERATE</span>
-                        <span>HARD</span>
-                    </div>
-                    <div class="w-full h-4 flex border border-white/30 rounded overflow-hidden">
-                        <div class="flex-1 bg-[#00ffff]"></div> <div class="flex-1 bg-[#0099ff]"></div> <div class="flex-1 bg-[#0000ff]"></div> <div class="flex-1 bg-[#00ff00]"></div> <div class="flex-1 bg-[#00cc00]"></div> <div class="flex-1 bg-[#008000]"></div> <div class="flex-1 bg-[#ffff00]"></div> <div class="flex-1 bg-[#ffcc00]"></div> <div class="flex-1 bg-[#ff8000]"></div> <div class="flex-1 bg-[#ff0000]"></div> <div class="flex-1 bg-[#cc0000]"></div> <div class="flex-1 bg-[#ff00ff]"></div> <div class="flex-1 bg-[#800080]"></div> <div class="flex-1 bg-[#ffffff]"></div> </div>
-                    <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
-                        <span>15</span>
-                        <span>30</span>
-                        <span>45</span>
-                        <span>60</span>
-                        <span>75+</span>
-                    </div>
-                </div>
-
-                <!-- [新增] 多普勒雷达图例 -->
-                <div id="doppler-legend" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/20 px-4 py-3 rounded-xl flex flex-col gap-1 z-40 shadow-[0_0_20px_rgba(0,0,0,0.8)] pointer-events-none transition-all duration-300 transform translate-y-4 opacity-0 data-[show=true]:translate-y-0 data-[show=true]:opacity-100 min-w-[320px]">
-                    <div class="flex justify-between text-[10px] font-mono font-bold text-slate-400 px-1 tracking-widest">
-                        <span>INBOUND</span>
-                        <span>ZERO</span>
-                        <span>OUTBOUND</span>
-                    </div>
-                    <!-- 使用 CSS 线性渐变模拟多色阶 -->
-                    <div class="w-full h-4 border border-white/30 rounded overflow-hidden"
-                         style="background: linear-gradient(to right,
-                            #6d28d9 0%,   /* -50+ */
-                            #1e40af 10%,  /* -40 */
-                            #3b82f6 20%,  /* -30 */
-                            #15803d 30%,  /* -20 */
-                            #22c55e 40%,  /* -10 */
-                            #86efac 45%,  /* -5 */
-                            #9ca3af 50%,  /* 0 */
-                            #fde047 55%,  /* +5 */
-                            #fb923c 60%,  /* +10 */
-                            #f97316 70%,  /* +20 */
-                            #ef4444 80%,  /* +30 */
-                            #b91c1c 90%,  /* +40 */
-                            #ec4899 100%  /* +50+ */
-                         );">
-                    </div>
-                    <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-0.5 px-1">
-                        <span>-50</span>
-                        <span>-25</span>
-                        <span>0</span>
-                        <span>+25</span>
-                        <span>+50</span>
-                    </div>
-                </div>
                 <!-- 启动按钮 -->
                 <button id="generateButton" class="group relative px-6 py-2 bg-slate-100 text-black rounded-xl font-bold text-xs md:text-sm tracking-wide shadow-lg hover:shadow-cyan-500/50 hover:bg-cyan-400 transition-all duration-300 overflow-hidden min-w-[120px]">
                     <span class="relative z-10 flex items-center justify-center gap-2" data-t="initialize"><i class="fa-solid fa-power-off"></i> INITIALIZE</span>

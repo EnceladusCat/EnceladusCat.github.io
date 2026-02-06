@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         showAllBtn.addEventListener('click', () => {
             if (state.history.length === 0) {
-                    alert("没有历史记录可显示。");
+                    alert("No historical track to display :(");
                     return;
                 }
             
@@ -2962,99 +2962,48 @@ contentArea.innerHTML = `
             generateButton.click();
         }
 
-        if (event.code === 'KeyR') {
-            // [修改] 如果正在显示多普勒，则关闭多普勒，切换到基本反射率
-            const radarLegend = document.getElementById('radar-legend');
-            const dopplerLegend = document.getElementById('doppler-legend');
+        const toggleLegend = (elementId, show) => {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            
+            if (show) {
+                el.classList.remove('hidden');
+                // 使用 requestAnimationFrame 确保 remove hidden 后 transition 生效
+                requestAnimationFrame(() => el.setAttribute('data-show', 'true'));
+            } else {
+                el.setAttribute('data-show', 'false');
+                setTimeout(() => el.classList.add('hidden'), 300);
+            }
+        };
 
+        // [优化] 统一更新 UI 状态 (状态改变后调用一次即可)
+        const updateRadarUI = () => {
+            toggleLegend('radar-legend', state.radarMode);
+            toggleLegend('doppler-legend', state.dopplerMode);
+            requestRedraw();
+            console.log(`[Mode] Radar: ${state.radarMode}, Doppler: ${state.dopplerMode}`);
+        };
+
+        // 'R' 键：切换雷达 (如果多普勒开启，则强切回雷达)
+        if (event.code === 'KeyR') {
             if (state.dopplerMode) {
                 state.dopplerMode = false;
                 state.radarMode = true;
             } else {
-                // 原有逻辑：切换基本反射率
                 state.radarMode = !state.radarMode;
             }
-            
-            if (state.radarMode) {
-                // 如果开启雷达，显示雷达图例
-                if (radarLegend) {
-                    radarLegend.classList.remove('hidden');
-                    // 延时以触发 CSS transition 动画
-                    setTimeout(() => {
-                        radarLegend.setAttribute('data-show', 'true');
-                    }, 10);
-                }
-                // 隐藏多普勒图例
-                if (dopplerLegend) {
-                    dopplerLegend.setAttribute('data-show', 'false');
-                    setTimeout(() => {
-                        dopplerLegend.classList.add('hidden');
-                    }, 300); // 等待动画结束
-                }
-            } else {
-                // 如果关闭雷达，隐藏雷达图例
-                if (radarLegend) {
-                    radarLegend.setAttribute('data-show', 'false');
-                    setTimeout(() => {
-                        radarLegend.classList.add('hidden');
-                    }, 300); // 等待动画结束
-                }
-                if (dopplerLegend) {
-                    dopplerLegend.setAttribute('data-show', 'false');
-                    setTimeout(() => {
-                        dopplerLegend.classList.add('hidden');
-                    }, 300); // 等待动画结束
-                }
-            }
-            // Optional: Play a sound
-            // playToggleOn(); 
-            
-            // Trigger redraw
-            requestRedraw();
-           
-            // Visual feedback (Toast or Console)
-            console.log(`Radar Mode: ${state.radarMode ? 'ON' : 'OFF'}`);
+            updateRadarUI();
         }
 
-        // [新增] 'D' 键切换多普勒雷达
+        // 'D' 键：切换多普勒 (如果雷达开启，则强切回多普勒)
         if (event.code === 'KeyD') {
-            const radarLegend = document.getElementById('radar-legend');
-            const dopplerLegend = document.getElementById('doppler-legend');
-
-            // 如果正在显示基本反射率，则关闭它，切换到多普勒
             if (state.radarMode) {
                 state.radarMode = false;
                 state.dopplerMode = true;
             } else {
                 state.dopplerMode = !state.dopplerMode;
             }
-            
-            // 多普勒模式下，我们暂时隐藏基本反射率的图例 (颜色含义不同)
-            if (state.dopplerMode) {
-                if (dopplerLegend) {
-                    dopplerLegend.classList.remove('hidden');
-                    setTimeout(() => {
-                        dopplerLegend.setAttribute('data-show', 'true');
-                    }, 10);
-                }
-                if (radarLegend) {
-                    radarLegend.setAttribute('data-show', 'false');
-                    setTimeout(() => {
-                        radarLegend.classList.add('hidden');
-                    }, 300);
-                }
-                console.log(`Doppler Mode: ON`);
-            } else {
-                 if (dopplerLegend) {
-                    dopplerLegend.setAttribute('data-show', 'false');
-                    setTimeout(() => {
-                        dopplerLegend.classList.add('hidden');
-                    }, 300);
-                }
-                console.log(`Doppler Mode: OFF`);
-            }
-            
-            requestRedraw();
+            updateRadarUI();
         }
         // 1, 2, 3: 切换模拟速度 (如果你之前添加了这部分代码，请保留)
         if (event.key === '1') changeSimulationSpeed(50);
