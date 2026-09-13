@@ -348,7 +348,26 @@
             pointer-events: none;
             background: rgba(0,0,0,0.5); /* 增加文字背景提高可读性 */
         }
-        
+
+        /* 开幕提示框 */
+        #opening-notice {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        #opening-notice.is-dismissed {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #opening-notice-card {
+            box-shadow: 0 0 80px rgba(34, 211, 238, 0.16), 8px 8px 0 rgba(2, 132, 199, 0.18);
+        }
+
+        #opening-notice-title {
+            text-wrap: balance;
+        }
+    
     </style>
 </head>
 <body class="w-screen h-screen font-sans text-slate-200 selection:bg-cyan-500/30 relative">
@@ -377,6 +396,17 @@
                     </p>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 开幕提示框 -->
+    <div id="opening-notice" class="fixed inset-0 z-[9998] flex items-center justify-center bg-black/75 px-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="opening-notice-title">
+        <div id="opening-notice-card" class="relative w-full max-w-4xl border-2 border-cyan-400/60 bg-[#07111f]/95 px-6 py-12 text-center md:px-12 md:py-16">
+            <button id="opening-notice-close" type="button" class="absolute right-3 top-2 px-2 text-3xl leading-none text-slate-500 transition-colors hover:text-cyan-300" aria-label="Close notice">×</button>
+            <a id="opening-notice-title" href="https://enceladus.pages.dev/" target="_blank" rel="noopener noreferrer" class="block text-xl font-black leading-tight tracking-tight text-white transition-colors hover:text-cyan-300 sm:text-2xl md:text-4xl lg:text-5xl">
+                GO TO https://enceladus.pages.dev/ FOR UPDATED CONTENT
+            </a>
+            <p class="mt-7 text-sm font-normal tracking-[0.35em] text-cyan-300/80">i luv u</p>
         </div>
     </div>
     
@@ -1736,6 +1766,23 @@
         </script>
     <script>
     document.addEventListener("DOMContentLoaded", () => {
+        const openingNotice = document.getElementById('opening-notice');
+        const openingNoticeClose = document.getElementById('opening-notice-close');
+
+        const dismissOpeningNotice = () => {
+            if (!openingNotice) return;
+            openingNotice.classList.add('is-dismissed');
+            window.setTimeout(() => openingNotice.remove(), 320);
+        };
+
+        openingNoticeClose?.addEventListener('click', dismissOpeningNotice);
+        openingNotice?.addEventListener('click', event => {
+            if (event.target === openingNotice) dismissOpeningNotice();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') dismissOpeningNotice();
+        });
+
         // --- 配置 ---
         const loadingTime = 1000; // 持续时间 1000ms = 1秒
         const hints = [
